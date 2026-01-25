@@ -1,18 +1,18 @@
 import os
+import json
+import random
+import asyncio
+from PIL import Image
+from google import genai
+from google.genai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import ArticleState, AnalysisResponse, EditorContentResponse
-import json
-import random
-from google import genai
-from google.genai import types
-from PIL import Image
-import asyncio
 
 
 # 스타일 래퍼 정의
-WEBTOON_STYLE = "Modern digital webtoon art style, clean lines, vibrant cel-shading, high-quality anime aesthetic, "
-CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, soft pastel tones, clean corporate design, "
+WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
+CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. Maintain exact same color palette and layout style. "
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=os.environ["GOOGLE_API_KEY"])
 client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
@@ -113,69 +113,68 @@ def save_local_image(article_id, idx, img):
     return file_path
 
 
-def webtoon_image_gen_node(state: ArticleState):
-    """[순차 루프] 웹툰은 1번 이미지를 참조하여 일관성 유지"""
-    idx = state.get("current_image_index", 0)
-
-    instruction = "Ensure the Korean text in the speech bubble is clear and legible. Use a simple comic font."
-    full_prompt = f"{WEBTOON_STYLE} {state['image_prompts'][idx]}. Ensure consistent character appearance. {instruction}"
-
-    image_urls = state.get("image_urls", [])
+async def generate_image_task(article_id, idx, prompt, content_type, ref_image_path=None):
+    """개별 이미지 생성 비동기 태스크"""
+    style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
     
-    print(f"--- 웹툰 이미지 생성 중 ({idx + 1}/4) ---")
+    # 텍스트 지침 강화
+    instruction = "Ensure the Korean text is legible."
+    if content_type == "CARD_NEWS":
+        instruction += " Focus on infographic elements and consistent background color."
     
-    contents = [full_prompt]
-    # 2번째 이미지부터는 1번 이미지를 스타일 참조
-    if idx > 0 and image_urls:
-        contents.append(Image.open(image_urls[0]))
-        
-    response = client.models.generate_content(
-        model="gemini-3-pro-image-preview", #TODO: 모델명 분리
-        contents=contents,
-        config=types.GenerateContentConfig(response_modalities=['IMAGE'])
-    )
-    
-    img = next((part.as_image() for part in response.parts if part.inline_data), None)
-    if img:
-        path = save_local_image(state['raw_article']['id'], idx, img)
-        return {"image_urls": image_urls + [path], "current_image_index": idx + 1}
-    return {"current_image_index": idx + 1}
+    final_prompt = f"{style} {prompt}. {instruction}"
+    contents = [final_prompt]
 
+    # 기준 이미지(이미지 0번)가 있으면 참조로 주입
+    if ref_image_path and os.path.exists(ref_image_path):
+        ref_img = Image.open(ref_image_path)
+        contents.append(ref_img)
+        final_prompt += " Strictly follow the visual style and character features of the attached reference image."
 
-async def generate_single_cardnews(article_id, idx, prompt):
-    """카드뉴스 개별 생성 (비동기)"""
-    instruction = "Focus on a clean infographic layout. If there's Korean text, make it bold and centered. Keep the background simple for readability."
-    full_prompt = f"{CARDNEWS_STYLE} {prompt}. {instruction}"
-
-    response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash-image", #TODO: 모델명 분리
-        contents=[full_prompt],
-        config=types.GenerateContentConfig(response_modalities=['IMAGE'])
-    )
-    img = next((part.as_image() for part in response.parts if part.inline_data), None)
-    if img:
-        return save_local_image(article_id, idx, img)
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-3-pro-image-preview",
+            contents=contents,
+            config=types.GenerateContentConfig(response_modalities=['IMAGE'])
+        )
+        img = next((part.as_image() for part in response.parts if part.inline_data), None)
+        if img:
+            return save_local_image(article_id, idx, img)
+    except Exception as e:
+        print(f"Error generating image {idx}: {e}")
     return None
 
 
-def card_news_image_gen_node(state: ArticleState):
-    """[병렬 처리] 카드뉴스는 속도 우선, 4장 동시 생성"""
-    print(f"--- 카드뉴스 이미지 4장 병렬 생성 시작 ---")
+def image_gen_node(state: ArticleState):
+    """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
     article_id = state['raw_article']['id']
+    content_type = state['content_type']
     prompts = state['image_prompts']
     
-    # 비동기 루프 실행
+    # 1. 첫 번째 이미지(기준점) 생성 (동기 방식)
     loop = asyncio.get_event_loop()
-    tasks = [generate_single_cardnews(article_id, i, prompts[i]) for i in range(4)]
-    paths = loop.run_until_complete(asyncio.gather(*tasks))
+    anchor_image_path = loop.run_until_complete(
+        generate_image_task(article_id, 0, prompts[0], content_type)
+    )
     
-    valid_paths = [p for p in paths if p]
-    return {"image_urls": valid_paths}
+    if not anchor_image_path:
+        return {"error": "기준 이미지 생성 실패"}
+
+    # 2. 남은 3장 병렬 생성 (1번 이미지 참조)
+    tasks = [
+        generate_image_task(article_id, i, prompts[i], content_type, anchor_image_path)
+        for i in range(1, 4)
+    ]
+    
+    parallel_paths = loop.run_until_complete(asyncio.gather(*tasks))
+    
+    # 결과 합치기
+    all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
+    return {"image_urls": all_paths}
 
 
 def final_save_node(state: ArticleState):
-    """최종 결과를 JSON으로 저장"""
-    import json
+    """최종 결과물 저장"""
     article_id = state['raw_article']['id']
     output_data = {
         "article_id": article_id,
@@ -189,8 +188,10 @@ def final_save_node(state: ArticleState):
     }
     
     file_path = f"output/{article_id}/content.json"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
         
-    print(f"--- 최종 결과 저장 완료: {file_path} ---")
+    print(f"--- 최종 결과 저장: {file_path} ---")
     return state
