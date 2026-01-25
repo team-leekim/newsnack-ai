@@ -140,7 +140,7 @@ async def generate_image_task(article_id, idx, prompt, content_type, ref_image_p
     if ref_image_path and os.path.exists(ref_image_path):
         ref_img = Image.open(ref_image_path)
         contents.append(ref_img)
-        final_prompt += " Use the reference image ONLY to maintain character/style consistency. IGNORE its composition and pose."
+        contents[0] += " Use the reference image ONLY to maintain character/style consistency. IGNORE its composition and pose."
 
     try:
         response = await client.aio.models.generate_content(
@@ -201,6 +201,7 @@ def final_save_node(state: ArticleState):
         "body": state["final_body"],
         "summary": state["summary"],
         "keywords": state["keywords"],
+        "image_prompts": state["image_prompts"],
         "images": state["image_urls"]
     }
     

@@ -16,15 +16,4 @@ final_state = app.invoke({
     "editor": None
 })
 
-print(f"\n[1] 분석 결과")
-print(f"- 분류된 타입: {final_state['content_type']}")
-print(f"- 추출된 키워드: {final_state['keywords']}")
-
-print(f"\n[2] 배정된 에디터")
-print(f"- 에디터 이름: {final_state['editor']['name']}")
-print(f"- 에디터 타입: {final_state['editor']['type']}")
-
-print(f"\n[3] 최종 콘텐츠 (제목: {final_state['final_title']})")
-print(f"- 본문 내용 샘플: {final_state['final_body'][:100]}...")
-print(f"- 이미지 프롬프트: {final_state['image_prompts']}")
-print(f"- 생성된 이미지 URL: {final_state['image_urls']}")
+print("AI 이미지 생성 완료")

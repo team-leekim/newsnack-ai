@@ -9,10 +9,6 @@ from .nodes import (
     final_save_node
 )
 
-def should_continue_webtoon(state: ArticleState):
-    return "generate" if state.get("current_image_index", 0) < 4 else "save"
-
-
 def create_graph():
     workflow = StateGraph(ArticleState)
 
