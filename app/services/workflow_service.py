@@ -60,7 +60,7 @@ class WorkflowService:
         try:
             print(f"[Workflow] Starting single pipeline for issue with {len(target_articles)} articles")
             # 랭그래프 실행
-            await asyncio.to_thread(self.graph.invoke, initial_state)
+            await self.graph.ainvoke(initial_state) 
             print(f"[Workflow] Successfully generated AI content for IDs: {source_article_ids}")
         except Exception as e:
             print(f"[Workflow] Error during generation for {source_article_ids}: {e}")

@@ -24,7 +24,7 @@ editor_llm = llm.with_structured_output(EditorContentResponse)
 
 
 
-def select_editor_node(state: ArticleState):
+async def select_editor_node(state: ArticleState):
     """분류된 타입에 맞는 에디터를 JSON 데이터에서 선택"""
     # TODO: 에디터 선택 로직 개선
     editors = state["available_editors"]
@@ -36,7 +36,7 @@ def select_editor_node(state: ArticleState):
     return {"editor": selected}
 
 
-def analyze_node(state: ArticleState):
+async def analyze_node(state: ArticleState):
     """뉴스 분석, 키워드 추출 및 타입 분류"""
     article = state['raw_article']
     
@@ -49,7 +49,7 @@ def analyze_node(state: ArticleState):
     본문: {article['content']}
     """
     
-    response = analyze_llm.invoke(prompt)
+    response = await analyze_llm.ainvoke(prompt)
     
     return {
         "summary": response.summary,
@@ -58,7 +58,7 @@ def analyze_node(state: ArticleState):
     }
 
 
-def webtoon_creator_node(state: ArticleState):
+async def webtoon_creator_node(state: ArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     article = state['raw_article']
@@ -74,7 +74,7 @@ def webtoon_creator_node(state: ArticleState):
     """)
     human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
     
-    response = editor_llm.invoke([system_msg, human_msg])
+    response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
         "final_title": response.final_title,
@@ -83,7 +83,7 @@ def webtoon_creator_node(state: ArticleState):
     }
 
 
-def card_news_creator_node(state: ArticleState):
+async def card_news_creator_node(state: ArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     article = state['raw_article']
@@ -104,7 +104,7 @@ def card_news_creator_node(state: ArticleState):
     """)
     human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
     
-    response = editor_llm.invoke([system_msg, human_msg])
+    response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
         "final_title": response.final_title,
@@ -160,17 +160,14 @@ async def generate_image_task(content_key: str, idx: int, prompt: str, content_t
     return None
 
 
-def image_gen_node(state: ArticleState):
+async def image_gen_node(state: ArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
     content_key = state['raw_article']['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
     
     # 1. 첫 번째 이미지(기준점) 생성 (동기 방식)
-    loop = asyncio.get_event_loop()
-    anchor_image_path = loop.run_until_complete(
-        generate_image_task(content_key, 0, prompts[0], content_type)
-    )
+    anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
     
     if not anchor_image_path:
         return {"error": "기준 이미지 생성 실패"}
@@ -181,14 +178,14 @@ def image_gen_node(state: ArticleState):
         for i in range(1, 4)
     ]
     
-    parallel_paths = loop.run_until_complete(asyncio.gather(*tasks))
+    parallel_paths = await asyncio.gather(*tasks)
     
     # 결과 합치기
     all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
     return {"image_urls": all_paths}
 
 
-def final_save_node(state: ArticleState):
+async def final_save_node(state: ArticleState):
     """최종 결과물 저장"""
     article_data = state['raw_article']
     content_key = article_data['content_key']
