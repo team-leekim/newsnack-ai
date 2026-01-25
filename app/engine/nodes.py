@@ -92,6 +92,7 @@ def image_gen_node(state: ArticleState):
     idx = state.get("current_image_index", 0)
     prompt = state["image_prompts"][idx]
     generated_images = state.get("generated_images", [])
+    image_urls = state.get("image_urls", [])
     
     print(f"--- 이미지 생성 중 ({idx + 1}/4) ---")
     
@@ -125,7 +126,7 @@ def image_gen_node(state: ArticleState):
         img.save(file_path)
         
         return {
-            "image_urls": state["image_urls"] + [file_path],
+            "image_urls": image_urls + [file_path],
             "generated_images": generated_images + [img],
             "current_image_index": idx + 1
         }
