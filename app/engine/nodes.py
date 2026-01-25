@@ -4,7 +4,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from .state import GraphState, AnalysisResponse, ImagePromptResponse
 
 # 모델 설정
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=os.environ["GOOGLE_API_KEY"])
 analyze_llm = llm.with_structured_output(AnalysisResponse)
 design_llm = llm.with_structured_output(ImagePromptResponse)
 
