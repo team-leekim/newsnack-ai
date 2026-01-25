@@ -11,8 +11,8 @@ async def create_ai_article(
     request: AIContentCreateRequest, 
     background_tasks: BackgroundTasks
 ):
-    background_tasks.add_task(workflow_service.run_ai_content_pipeline, request.source_article_ids)
-    
+    background_tasks.add_task(workflow_service.run_ai_article_pipeline, request.source_article_ids)
+
     return GenerationStatusResponse(
         status="accepted",
         message="콘텐츠 생성 작업이 백그라운드에서 시작되었습니다.",

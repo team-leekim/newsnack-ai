@@ -1,3 +1,4 @@
+import uuid
 import json
 import asyncio
 from typing import List
@@ -34,7 +35,7 @@ class WorkflowService:
         ])
 
         integrated_article = {
-            "id": source_article_ids[0],
+            "content_key": str(uuid.uuid4()),
             "source_ids": source_article_ids,
             "title": target_articles[0]["title"],
             "content": merged_content,

@@ -113,16 +113,16 @@ def card_news_creator_node(state: ArticleState):
     }
 
 
-def save_local_image(article_id, idx, img):
-    """이미지 저장 공통 유틸"""
-    folder_path = f"output/{article_id}"
+def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
+    """이미지 로컬 저장 공통 유틸"""
+    folder_path = f"output/{content_key}"
     os.makedirs(folder_path, exist_ok=True)
     file_path = f"{folder_path}/image_{idx}.png"
     img.save(file_path)
     return file_path
 
 
-async def generate_image_task(article_id, idx, prompt, content_type, ref_image_path=None):
+async def generate_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
     """개별 이미지 생성 비동기 태스크"""
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
 
@@ -154,7 +154,7 @@ async def generate_image_task(article_id, idx, prompt, content_type, ref_image_p
         )
         img = next((part.as_image() for part in response.parts if part.inline_data), None)
         if img:
-            return save_local_image(article_id, idx, img)
+            return save_local_image(content_key, idx, img)
     except Exception as e:
         print(f"Error generating image {idx}: {e}")
     return None
@@ -162,14 +162,14 @@ async def generate_image_task(article_id, idx, prompt, content_type, ref_image_p
 
 def image_gen_node(state: ArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
-    article_id = state['raw_article']['id']
+    content_key = state['raw_article']['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
     
     # 1. 첫 번째 이미지(기준점) 생성 (동기 방식)
     loop = asyncio.get_event_loop()
     anchor_image_path = loop.run_until_complete(
-        generate_image_task(article_id, 0, prompts[0], content_type)
+        generate_image_task(content_key, 0, prompts[0], content_type)
     )
     
     if not anchor_image_path:
@@ -177,7 +177,7 @@ def image_gen_node(state: ArticleState):
 
     # 2. 남은 3장 병렬 생성 (1번 이미지 참조)
     tasks = [
-        generate_image_task(article_id, i, prompts[i], content_type, anchor_image_path)
+        generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
         for i in range(1, 4)
     ]
     
@@ -190,9 +190,12 @@ def image_gen_node(state: ArticleState):
 
 def final_save_node(state: ArticleState):
     """최종 결과물 저장"""
-    article_id = state['raw_article']['id']
+    article_data = state['raw_article']
+    content_key = article_data['content_key']
+
     output_data = {
-        "article_id": article_id,
+        "content_key": content_key,
+        "source_article_ids": article_data['source_ids'],
         "content_type": state["content_type"],
         "editor": state["editor"]["name"],
         "title": state["final_title"],
@@ -203,9 +206,8 @@ def final_save_node(state: ArticleState):
         "images": state["image_urls"]
     }
     
-    file_path = f"output/{article_id}/content.json"
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
+    # TODO: S3 업로드 로직 추가
+    file_path = f"output/{content_key}/content.json"
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
         
