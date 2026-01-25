@@ -67,9 +67,12 @@ def webtoon_creator_node(state: ArticleState):
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
-    너는 지금부터 이 뉴스를 '웹툰' 형식의 대본으로 재구성해야 해. 
-    기승전결이 뚜렷하게 한국어로 작성해줘. 
-    독자들이 흥미를 느낄 수 있도록 에디터의 말투를 활용해.
+    너는 지금부터 이 뉴스를 4페이지 분량의 시각적 스토리보드로 재구성해야 해.
+    
+    [미션]
+    1. 각 페이지의 'image_prompts'는 서로 다른 시각적 구도와 내용을 담아야 함.
+    2. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
+    3. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
     """)
     human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
     
@@ -87,11 +90,19 @@ def card_news_creator_node(state: ArticleState):
     editor = state['editor']
     article = state['raw_article']
     
-    system_msg = SystemMessage(content=f"{editor['persona_prompt']}\n너는 지금부터 이 뉴스를 '카드뉴스' 형식으로 재구성해야 해. 정보를 전달하기 쉽고 명확하게 요약해서 작성해줘.")
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
-    너는 지금부터 이 뉴스를 '카드뉴스' 형식으로 재구성해야 해.
-    정보를 전달하기 쉽고 명확하게 한글로 요약해서 작성해줘.
+    너는 복잡한 뉴스를 한눈에 들어오는 4장의 카드뉴스로 재구성해야 해.
+    
+    [미션]
+    1. 4개의 'image_prompts'는 뉴스 본문의 핵심 정보를 단계별로 시각화해야 함.
+    2. 각 페이지는 시각적 중복을 피하기 위해 레이아웃을 다르게 구성해:
+       - 1번: 시선을 끄는 강력한 제목과 상징적인 아이콘
+       - 2번: 핵심 수치나 데이터를 강조하는 차트 또는 다이어그램
+       - 3번: 사건의 인과관계를 보여주는 단계별 레이아웃
+       - 4번: 한눈에 들어오는 요약 리스트와 마무리 비주얼
+    3. 모든 설명은 한국어로 작성하되, 'image_prompts' 내의 시각 묘사만 영어로 작성해줘.
+    4. 디자인은 세련된 소셜 미디어 감성(Modern and trendy social media aesthetic)을 유지해.
     """)
     human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
     
@@ -116,9 +127,9 @@ def save_local_image(article_id, idx, img):
 async def generate_image_task(article_id, idx, prompt, content_type, ref_image_path=None):
     """개별 이미지 생성 비동기 태스크"""
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
-    
+
     # 텍스트 지침 강화
-    instruction = "Ensure the Korean text is legible."
+    instruction = "Write all text for Korean readers. Use Korean for general text, but keep proper nouns, brand names, and English acronyms in English. Ensure all text is legible."
     if content_type == "CARD_NEWS":
         instruction += " Focus on infographic elements and consistent background color."
     
@@ -129,7 +140,7 @@ async def generate_image_task(article_id, idx, prompt, content_type, ref_image_p
     if ref_image_path and os.path.exists(ref_image_path):
         ref_img = Image.open(ref_image_path)
         contents.append(ref_img)
-        final_prompt += " Strictly follow the visual style and character features of the attached reference image."
+        final_prompt += " Use the reference image ONLY to maintain character/style consistency. IGNORE its composition and pose."
 
     try:
         response = await client.aio.models.generate_content(

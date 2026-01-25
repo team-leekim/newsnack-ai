@@ -32,4 +32,12 @@ class EditorContentResponse(BaseModel):
     """에디터가 재작성한 본문 및 이미지 프롬프트"""
     final_title: str = Field(description="에디터 말투가 반영된 새로운 제목")
     final_body: str = Field(description="에디터 말투로 재작성된 전체 본문 내용")
-    image_prompts: List[str] = Field(description="본문을 시각화할 이미지 생성 영문 프롬프트 4개")
+    image_prompts: List[str] = Field(
+        min_items=4,
+        max_items=4,
+        description=(
+            "4 distinct visual descriptions in English that form a narrative flow of the news. "
+            "Each prompt must describe a unique composition, subject, or perspective to ensure "
+            "visual variety and avoid repetitive scenes."
+        )
+)
