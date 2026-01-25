@@ -1,7 +1,6 @@
 import uuid
 import json
-import asyncio
-from typing import Dict, List
+import logging
 from pathlib import Path
 from app.engine.graph import create_graph
 
@@ -58,11 +57,11 @@ class WorkflowService:
         }
 
         try:
-            print(f"[Workflow] Starting single pipeline for issue with {len(target_articles)} articles")
+            logging.info(f"[Workflow] Starting single pipeline for issue with {len(target_articles)} articles")
             # 랭그래프 실행
             await self.graph.ainvoke(initial_state) 
-            print(f"[Workflow] Successfully generated AI content for IDs: {source_article_ids}")
+            logging.info(f"[Workflow] Successfully generated AI content for IDs: {source_article_ids}")
         except Exception as e:
-            print(f"[Workflow] Error during generation for {source_article_ids}: {e}")
+            logging.error(f"[Workflow] Error during generation for {source_article_ids}: {e}", exc_info=True)
 
 workflow_service = WorkflowService()
