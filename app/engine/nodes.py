@@ -5,7 +5,7 @@ from .state import ArticleState, AnalysisResponse, EditorContentResponse
 import json
 import random
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=os.getenv("GOOGLE_API_KEY"))
 
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
