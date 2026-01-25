@@ -2,11 +2,13 @@ import os
 import json
 import random
 import asyncio
+import logging
 from PIL import Image
 from google import genai
 from google.genai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
+from app.core.config import settings
 from .state import ArticleState, AnalysisResponse, EditorContentResponse
 
 
@@ -14,22 +16,19 @@ from .state import ArticleState, AnalysisResponse, EditorContentResponse
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
 CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. Maintain exact same color palette and layout style. "
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=os.environ["GOOGLE_API_KEY"])
-client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=settings.GOOGLE_API_KEY)
+client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
 editor_llm = llm.with_structured_output(EditorContentResponse)
 
 
-def load_editors():
-    with open("data/editors.json", "r", encoding="utf-8") as f:
-        return json.load(f)
 
-
-def select_editor_node(state: ArticleState):
+async def select_editor_node(state: ArticleState):
     """분류된 타입에 맞는 에디터를 JSON 데이터에서 선택"""
-    editors = load_editors()
+    # TODO: 에디터 선택 로직 개선
+    editors = state["available_editors"]
     target_type = state["content_type"]
     
     candidates = [e for e in editors if e["type"] == target_type]
@@ -38,7 +37,7 @@ def select_editor_node(state: ArticleState):
     return {"editor": selected}
 
 
-def analyze_node(state: ArticleState):
+async def analyze_node(state: ArticleState):
     """뉴스 분석, 키워드 추출 및 타입 분류"""
     article = state['raw_article']
     
@@ -51,7 +50,7 @@ def analyze_node(state: ArticleState):
     본문: {article['content']}
     """
     
-    response = analyze_llm.invoke(prompt)
+    response = await analyze_llm.ainvoke(prompt)
     
     return {
         "summary": response.summary,
@@ -60,7 +59,7 @@ def analyze_node(state: ArticleState):
     }
 
 
-def webtoon_creator_node(state: ArticleState):
+async def webtoon_creator_node(state: ArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     article = state['raw_article']
@@ -76,7 +75,7 @@ def webtoon_creator_node(state: ArticleState):
     """)
     human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
     
-    response = editor_llm.invoke([system_msg, human_msg])
+    response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
         "final_title": response.final_title,
@@ -85,7 +84,7 @@ def webtoon_creator_node(state: ArticleState):
     }
 
 
-def card_news_creator_node(state: ArticleState):
+async def card_news_creator_node(state: ArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     article = state['raw_article']
@@ -106,7 +105,7 @@ def card_news_creator_node(state: ArticleState):
     """)
     human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
     
-    response = editor_llm.invoke([system_msg, human_msg])
+    response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
         "final_title": response.final_title,
@@ -115,16 +114,16 @@ def card_news_creator_node(state: ArticleState):
     }
 
 
-def save_local_image(article_id, idx, img):
-    """이미지 저장 공통 유틸"""
-    folder_path = f"output/{article_id}"
+def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
+    """이미지 로컬 저장 공통 유틸"""
+    folder_path = os.path.join("output", content_key)
     os.makedirs(folder_path, exist_ok=True)
-    file_path = f"{folder_path}/image_{idx}.png"
+    file_path = os.path.join(folder_path, f"{idx}.png")
     img.save(file_path)
     return file_path
 
 
-async def generate_image_task(article_id, idx, prompt, content_type, ref_image_path=None):
+async def generate_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
     """개별 이미지 생성 비동기 태스크"""
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
 
@@ -156,45 +155,46 @@ async def generate_image_task(article_id, idx, prompt, content_type, ref_image_p
         )
         img = next((part.as_image() for part in response.parts if part.inline_data), None)
         if img:
-            return save_local_image(article_id, idx, img)
+            return save_local_image(content_key, idx, img)
     except Exception as e:
-        print(f"Error generating image {idx}: {e}")
+        logging.error(f"Error generating image {idx}: {e}")
     return None
 
 
-def image_gen_node(state: ArticleState):
+async def image_gen_node(state: ArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
-    article_id = state['raw_article']['id']
+    content_key = state['raw_article']['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
     
-    # 1. 첫 번째 이미지(기준점) 생성 (동기 방식)
-    loop = asyncio.get_event_loop()
-    anchor_image_path = loop.run_until_complete(
-        generate_image_task(article_id, 0, prompts[0], content_type)
-    )
+    # 1. 첫 번째 이미지(기준점) 생성
+    anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
     
     if not anchor_image_path:
+        logging.error("기준 이미지 생성 실패")
         return {"error": "기준 이미지 생성 실패"}
 
-    # 2. 남은 3장 병렬 생성 (1번 이미지 참조)
+    # 2. 남은 3장 병렬 생성
     tasks = [
-        generate_image_task(article_id, i, prompts[i], content_type, anchor_image_path)
+        generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
         for i in range(1, 4)
     ]
     
-    parallel_paths = loop.run_until_complete(asyncio.gather(*tasks))
+    parallel_paths = await asyncio.gather(*tasks)
     
     # 결과 합치기
     all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
     return {"image_urls": all_paths}
 
 
-def final_save_node(state: ArticleState):
+async def final_save_node(state: ArticleState):
     """최종 결과물 저장"""
-    article_id = state['raw_article']['id']
+    article_data = state['raw_article']
+    content_key = article_data['content_key']
+
     output_data = {
-        "article_id": article_id,
+        "content_key": content_key,
+        "source_article_ids": article_data['source_ids'],
         "content_type": state["content_type"],
         "editor": state["editor"]["name"],
         "title": state["final_title"],
@@ -205,11 +205,10 @@ def final_save_node(state: ArticleState):
         "images": state["image_urls"]
     }
     
-    file_path = f"output/{article_id}/content.json"
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
+    # TODO: S3 업로드 로직 추가
+    file_path = f"output/{content_key}/content.json"
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
         
-    print(f"--- 최종 결과 저장: {file_path} ---")
+    logging.info(f"최종 결과 저장: {file_path}")
     return state
