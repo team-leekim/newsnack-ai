@@ -91,15 +91,17 @@ def card_news_creator_node(state: ArticleState):
 def image_gen_node(state: ArticleState):
     idx = state.get("current_image_index", 0)
     prompt = state["image_prompts"][idx]
-    generated_images = state.get("generated_images", [])
     image_urls = state.get("image_urls", [])
     
     print(f"--- 이미지 생성 중 ({idx + 1}/4) ---")
     
     # 참조 이미지 설정 (2번째 이미지부터는 1번째 이미지를 참조로 사용)
     contents = [prompt]
-    if idx > 0 and generated_images:
-        contents.append(generated_images[0]) # 1번 이미지를 스타일 가이드로 주입
+    if idx > 0 and image_urls:
+        ref_path = image_urls[0] # 1번 이미지의 경로
+        if os.path.exists(ref_path):
+            ref_image = Image.open(ref_path)
+            contents.append(ref_image)
         
     response = client.models.generate_content(
         model="gemini-3-pro-image-preview",
@@ -127,7 +129,6 @@ def image_gen_node(state: ArticleState):
         
         return {
             "image_urls": image_urls + [file_path],
-            "generated_images": generated_images + [img],
             "current_image_index": idx + 1
         }
     

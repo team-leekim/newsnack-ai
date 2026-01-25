@@ -17,7 +17,6 @@ class ArticleState(TypedDict):
     image_prompts: List[str]
     image_urls: List[str]  # 로컬 저장 경로 또는 S3 URL
     current_image_index: int  # 현재 몇 번째 이미지를 생성 중인지 (0~3)
-    generated_images: List[any] # PIL Image 객체 또는 Bytes를 임시 저장 (참조용)
 
     error: Optional[str]
 
