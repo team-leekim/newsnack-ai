@@ -2,6 +2,7 @@ import os
 import json
 import random
 import asyncio
+import logging
 from PIL import Image
 from google import genai
 from google.genai import types
@@ -156,7 +157,7 @@ async def generate_image_task(content_key: str, idx: int, prompt: str, content_t
         if img:
             return save_local_image(content_key, idx, img)
     except Exception as e:
-        print(f"Error generating image {idx}: {e}")
+        logging.error(f"Error generating image {idx}: {e}")
     return None
 
 
@@ -170,6 +171,7 @@ async def image_gen_node(state: ArticleState):
     anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
     
     if not anchor_image_path:
+        logging.error("기준 이미지 생성 실패")
         return {"error": "기준 이미지 생성 실패"}
 
     # 2. 남은 3장 병렬 생성
@@ -208,5 +210,5 @@ async def final_save_node(state: ArticleState):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
         
-    print(f"--- 최종 결과 저장: {file_path} ---")
+    logging.info(f"최종 결과 저장: {file_path}")
     return state
