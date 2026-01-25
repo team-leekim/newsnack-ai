@@ -26,4 +26,4 @@ print(f"- 에디터 타입: {final_state['editor']['type']}")
 
 print(f"\n[3] 최종 콘텐츠 (제목: {final_state['final_title']})")
 print(f"- 본문 내용 샘플: {final_state['final_body'][:100]}...")
-print(f"- 이미지 프롬프트 수: {len(final_state['image_prompts'])}개")
+print(f"- 이미지 프롬프트: {final_state['image_prompts']}")
