@@ -115,9 +115,9 @@ async def card_news_creator_node(state: ArticleState):
 
 def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
     """이미지 로컬 저장 공통 유틸"""
-    folder_path = f"output/{content_key}"
+    folder_path = os.path.join("output", content_key)
     os.makedirs(folder_path, exist_ok=True)
-    file_path = f"{folder_path}/{idx}.png"
+    file_path = os.path.join(folder_path, f"{idx}.png")
     img.save(file_path)
     return file_path
 
@@ -166,13 +166,13 @@ async def image_gen_node(state: ArticleState):
     content_type = state['content_type']
     prompts = state['image_prompts']
     
-    # 1. 첫 번째 이미지(기준점) 생성 (동기 방식)
+    # 1. 첫 번째 이미지(기준점) 생성
     anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
     
     if not anchor_image_path:
         return {"error": "기준 이미지 생성 실패"}
 
-    # 2. 남은 3장 병렬 생성 (1번 이미지 참조)
+    # 2. 남은 3장 병렬 생성
     tasks = [
         generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
         for i in range(1, 4)
