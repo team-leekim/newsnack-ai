@@ -14,7 +14,7 @@ class WorkflowService:
         with open(self.base_path / filename, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    async def run_ai_content_pipeline(self, source_article_ids: List[int]):
+    async def run_ai_article_pipeline(self, source_article_ids: List[int]):
         """
         여러 개의 연관 기사를 하나의 맥락으로 합쳐서 단일 AI 콘텐츠 생성
         """

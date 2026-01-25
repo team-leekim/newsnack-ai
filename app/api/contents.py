@@ -4,10 +4,10 @@ from app.services.workflow_service import workflow_service
 
 router = APIRouter(tags=["Content Generation"])
 
-@router.post("/ai-contents",
+@router.post("/ai-article",
             response_model=GenerationStatusResponse,
             status_code=status.HTTP_202_ACCEPTED)
-async def create_ai_contents(
+async def create_ai_article(
     request: AIContentCreateRequest, 
     background_tasks: BackgroundTasks
 ):
