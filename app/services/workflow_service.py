@@ -1,7 +1,7 @@
 import uuid
 import json
 import asyncio
-from typing import List
+from typing import Dict, List
 from pathlib import Path
 from app.engine.graph import create_graph
 
@@ -15,13 +15,13 @@ class WorkflowService:
         with open(self.base_path / filename, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    async def run_ai_article_pipeline(self, source_article_ids: List[int]):
+    async def run_ai_article_pipeline(self, issue_id: int):
         """
         여러 개의 연관 기사를 하나의 맥락으로 합쳐서 단일 AI 콘텐츠 생성
         """
-        # TODO: raw_article 테이블에서 해당 기사 조회
+        # TODO: DB 조회 방식으로 변경
+        source_article_ids = [1]
         all_raw_articles = self._load_local_data("raw_articles.json")
-        # TODO: editor 테이블 전체 조회
         editors = self._load_local_data("editors.json")
 
         # 1. 요청받은 ID들에 해당하는 기사 추출
