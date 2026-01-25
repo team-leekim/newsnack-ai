@@ -11,7 +11,7 @@ async def create_ai_contents(
     request: AIContentCreateRequest, 
     background_tasks: BackgroundTasks
 ):
-    background_tasks.add_task(workflow_service.run_generation_pipeline, request.source_article_ids)
+    background_tasks.add_task(workflow_service.run_ai_content_pipeline, request.source_article_ids)
     
     return GenerationStatusResponse(
         status="accepted",

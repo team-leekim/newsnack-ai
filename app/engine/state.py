@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class ArticleState(TypedDict):
     # 입력 데이터
     raw_article: dict
+    available_editors: List[dict]
     editor: Optional[dict]
     
     # 분석 단계 결과

@@ -23,14 +23,11 @@ analyze_llm = llm.with_structured_output(AnalysisResponse)
 editor_llm = llm.with_structured_output(EditorContentResponse)
 
 
-def load_editors():
-    with open("data/editors.json", "r", encoding="utf-8") as f:
-        return json.load(f)
-
 
 def select_editor_node(state: ArticleState):
     """분류된 타입에 맞는 에디터를 JSON 데이터에서 선택"""
-    editors = load_editors()
+    # TODO: 에디터 선택 로직 개선
+    editors = state["available_editors"]
     target_type = state["content_type"]
     
     candidates = [e for e in editors if e["type"] == target_type]

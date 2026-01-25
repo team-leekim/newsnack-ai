@@ -14,29 +14,54 @@ class WorkflowService:
         with open(self.base_path / filename, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    async def run_generation_pipeline(self, article_ids: List[int]):
-        # TODO: 로컬 JSON 로드 로직을 DB 조회로 대체
-        raw_articles = self._load_local_data("raw_articles.json")
+    async def run_ai_content_pipeline(self, source_article_ids: List[int]):
+        """
+        여러 개의 연관 기사를 하나의 맥락으로 합쳐서 단일 AI 콘텐츠 생성
+        """
+        # TODO: raw_article 테이블에서 해당 기사 조회
+        all_raw_articles = self._load_local_data("raw_articles.json")
+        # TODO: editor 테이블 전체 조회
         editors = self._load_local_data("editors.json")
 
-        for target_id in article_ids:
-            # 해당 ID의 기사 찾기
-            article = next((a for a in raw_articles if a["id"] == target_id), None)
-            if not article:
-                continue
+        # 1. 요청받은 ID들에 해당하는 기사 추출
+        target_articles = [a for a in all_raw_articles if a["id"] in source_article_ids]
+        if not target_articles: return
 
-            # 초기 상태 구성
-            initial_state = {
-                "article_id": target_id,
-                "raw_content": article["content"],
-                "available_editors": editors,
-                "content_type": None
-            }
+        # 2. 본문 통합
+        merged_content = "\n\n---\n\n".join([
+            f"기사 제목: {a['title']}\n본문: {a['content']}" 
+            for a in target_articles
+        ])
 
-            try:
-                # 랭그래프 실행
-                await asyncio.to_thread(self.graph.invoke, initial_state)
-            except Exception as e:
-                print(f"Error processing {target_id}: {e}")
+        integrated_article = {
+            "id": source_article_ids[0],
+            "source_ids": source_article_ids,
+            "title": target_articles[0]["title"],
+            "content": merged_content,
+            "category": target_articles[0]["category"]
+        }
+
+        # 3. 랭그래프 초기 상태 구성
+        initial_state = {
+            "raw_article": integrated_article,
+            "editor": None,
+            "available_editors": editors,
+            "summary": [],
+            "keywords": [],
+            "content_type": "",
+            "final_title": "",
+            "final_body": "",
+            "image_prompts": [],
+            "image_urls": [],
+            "error": None
+        }
+
+        try:
+            print(f"[Workflow] Starting single pipeline for issue with {len(target_articles)} articles")
+            # 랭그래프 실행
+            await asyncio.to_thread(self.graph.invoke, initial_state)
+            print(f"[Workflow] Successfully generated AI content for IDs: {source_article_ids}")
+        except Exception as e:
+            print(f"[Workflow] Error during generation for {source_article_ids}: {e}")
 
 workflow_service = WorkflowService()
