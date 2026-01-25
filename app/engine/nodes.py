@@ -135,7 +135,13 @@ async def generate_image_task(article_id, idx, prompt, content_type, ref_image_p
         response = await client.aio.models.generate_content(
             model="gemini-3-pro-image-preview",
             contents=contents,
-            config=types.GenerateContentConfig(response_modalities=['IMAGE'])
+            config=types.GenerateContentConfig(
+                response_modalities=['IMAGE'],
+                image_config=types.ImageConfig(
+                aspect_ratio="1:1",
+                image_size="1K"
+                )
+            )
         )
         img = next((part.as_image() for part in response.parts if part.inline_data), None)
         if img:
