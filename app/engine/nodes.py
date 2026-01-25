@@ -4,8 +4,13 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from .state import ArticleState, AnalysisResponse, EditorContentResponse
 import json
 import random
+from google import genai
+from google.genai import types
+from PIL import Image
+import io
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=os.getenv("GOOGLE_API_KEY"))
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=os.environ["GOOGLE_API_KEY"])
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
@@ -81,3 +86,48 @@ def card_news_creator_node(state: ArticleState):
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
+
+
+def image_gen_node(state: ArticleState):
+    idx = state.get("current_image_index", 0)
+    prompt = state["image_prompts"][idx]
+    generated_images = state.get("generated_images", [])
+    
+    print(f"--- 이미지 생성 중 ({idx + 1}/4) ---")
+    
+    # 참조 이미지 설정 (2번째 이미지부터는 1번째 이미지를 참조로 사용)
+    contents = [prompt]
+    if idx > 0 and generated_images:
+        contents.append(generated_images[0]) # 1번 이미지를 스타일 가이드로 주입
+        
+    response = client.models.generate_content(
+        model="gemini-3-pro-image-preview",
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_modalities=['IMAGE'],
+            image_config=types.ImageConfig(aspect_ratio="1:1")
+        )
+    )
+    
+    # 결과 이미지 추출 및 로컬 저장
+    img = None
+    for part in response.parts:
+        if part.inline_data:
+            img = part.as_image()
+            break
+            
+    if img:
+        # 로컬 폴더 생성
+        folder_path = f"output/{state['raw_article']['id']}"
+        os.makedirs(folder_path, exist_ok=True)
+        
+        file_path = f"{folder_path}/image_{idx}.png"
+        img.save(file_path)
+        
+        return {
+            "image_urls": state["image_urls"] + [file_path],
+            "generated_images": generated_images + [img],
+            "current_image_index": idx + 1
+        }
+    
+    return {"error": "이미지 생성 실패", "current_image_index": idx + 1}
