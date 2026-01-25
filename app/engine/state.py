@@ -4,12 +4,11 @@ from pydantic import BaseModel, Field
 class ArticleState(TypedDict):
     # 입력 데이터
     raw_article: dict
-    editor: dict
+    editor: Optional[dict]
     
     # 분석 단계 결과
     summary: List[str]
     keywords: List[str]
-    importance_score: int
     content_type: str
     
     # 생성 단계 결과
@@ -25,7 +24,6 @@ class AnalysisResponse(BaseModel):
     """뉴스 분석 및 분류 결과"""
     summary: List[str] = Field(description="핵심 요약 3줄 리스트")
     keywords: List[str] = Field(description="뉴스 핵심 키워드 리스트 (최대 5개)")
-    importance_score: int = Field(description="뉴스데스크 선정을 위한 중요도 점수 (1-10)", ge=1, le=10)
     content_type: Literal["WEBTOON", "CARD_NEWS"] = Field(description="콘텐츠 타입 분류")
 
 
