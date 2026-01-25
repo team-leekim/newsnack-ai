@@ -1,31 +1,36 @@
 from typing import TypedDict, List, Optional, Literal
 from pydantic import BaseModel, Field
 
-class GraphState(TypedDict):
+class ArticleState(TypedDict):
     # 입력 데이터
     raw_article: dict
     editor: dict
     
-    # 중간 결과물
-    summary: List[str]      # 3줄 요약
-    content_type: str       # WEBTOON | CARD_NEWS
+    # 분석 단계 결과
+    summary: List[str]
+    keywords: List[str]
+    importance_score: int
+    content_type: str
     
-    # 최종 결과물
-    final_script: str       # 에디터 말투로 변환된 본문
-    image_prompts: List[str] # 각 장면별 이미지 생성 프롬프트
+    # 생성 단계 결과
+    final_title: str
+    final_body: str
+    image_prompts: List[str]
+    image_urls: List[str]  # 로컬 저장 경로 또는 S3 URL
     
-    # 상태 관리용
     error: Optional[str]
 
 
 class AnalysisResponse(BaseModel):
-    """뉴스 분석 결과 (요약 및 타입 분류)"""
-    summary: List[str] = Field(description="뉴스 핵심 내용을 3줄로 요약한 리스트")
-    content_type: Literal["WEBTOON", "CARD_NEWS"] = Field(
-        description="뉴스의 성격에 따른 콘텐츠 타입 (스토리 위주면 WEBTOON, 정보 위주면 CARD_NEWS)"
-    )
+    """뉴스 분석 및 분류 결과"""
+    summary: List[str] = Field(description="핵심 요약 3줄 리스트")
+    keywords: List[str] = Field(description="뉴스 핵심 키워드 리스트 (최대 5개)")
+    importance_score: int = Field(description="뉴스데스크 선정을 위한 중요도 점수 (1-10)", ge=1, le=10)
+    content_type: Literal["WEBTOON", "CARD_NEWS"] = Field(description="콘텐츠 타입 분류")
 
 
-class ImagePromptResponse(BaseModel):
-    """장면별 이미지 생성 프롬프트 리스트"""
-    prompts: List[str] = Field(description="이미지 생성을 위한 영문 프롬프트 4개 리스트")
+class EditorContentResponse(BaseModel):
+    """에디터가 재작성한 본문 및 이미지 프롬프트"""
+    final_title: str = Field(description="에디터 말투가 반영된 새로운 제목")
+    final_body: str = Field(description="에디터 말투로 재작성된 전체 본문 내용")
+    image_prompts: List[str] = Field(description="본문을 시각화할 이미지 생성 영문 프롬프트 4개")
