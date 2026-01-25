@@ -117,7 +117,7 @@ def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
     """이미지 로컬 저장 공통 유틸"""
     folder_path = f"output/{content_key}"
     os.makedirs(folder_path, exist_ok=True)
-    file_path = f"{folder_path}/image_{idx}.png"
+    file_path = f"{folder_path}/{idx}.png"
     img.save(file_path)
     return file_path
 
