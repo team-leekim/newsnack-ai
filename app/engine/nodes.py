@@ -1,24 +1,26 @@
 import os
 import asyncio
 import logging
+import base64
+from io import BytesIO
 from PIL import Image
 from google import genai
 from google.genai import types
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from .providers import ai_factory
 from .state import ArticleState, AnalysisResponse, EditorContentResponse
 from app.core.config import settings
-from app.database.models import Editor, AiContent, AiArticle, Category, EditorCategory
+from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle
 
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
 CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. Maintain exact same color palette and layout style. "
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=settings.GOOGLE_API_KEY)
-client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+# 현재 설정된 프로바이더의 LLM
+llm = ai_factory.get_llm()
 
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
@@ -163,11 +165,38 @@ def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
     return file_path
 
 
-async def generate_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
-    """개별 이미지 생성 비동기 태스크"""
+async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
+    """OpenAI를 사용한 개별 이미지 생성"""
+    client = ai_factory.get_image_client()
+    style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
+    final_prompt = f"{style} {prompt}. Ensure all text is in Korean if any."
+
+    try:
+        response = await client.images.generate(
+            model=settings.OPENAI_IMAGE_MODEL,
+            prompt=final_prompt,
+            n=1,
+            quality="medium", #TODO: 추후 결과물 품질에 따라 조정
+            size="1024x1024"
+        )
+        
+        # Base64 데이터 추출 및 PIL 이미지 변환
+        b64_data = response.data[0].b64_json
+        img_data = base64.b64decode(b64_data)
+        img = Image.open(BytesIO(img_data))
+        
+        return save_local_image(content_key, idx, img)
+        
+    except Exception as e:
+        logging.error(f"Error generating OpenAI image {idx}: {e}")
+        return None
+
+
+async def generate_google_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
+    """Gemini를 사용한 개별 이미지 생성"""
+    client = ai_factory.get_image_client()
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
 
-    # 텍스트 지침 강화
     instruction = "Write all text for Korean readers. Use Korean for general text, but keep proper nouns, brand names, and English acronyms in English. Ensure all text is legible."
     if content_type == "CARD_NEWS":
         instruction += " Focus on infographic elements and consistent background color."
@@ -183,7 +212,7 @@ async def generate_image_task(content_key: str, idx: int, prompt: str, content_t
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model=settings.GOOGLE_IMAGE_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=['IMAGE'],
@@ -206,53 +235,72 @@ async def image_gen_node(state: ArticleState):
     content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
-    
-    # 1. 첫 번째 이미지(기준점) 생성
-    anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
-    
-    if not anchor_image_path:
-        logging.error("기준 이미지 생성 실패")
-        return {"error": "기준 이미지 생성 실패"}
 
-    # 2. 남은 3장 병렬 생성
-    tasks = [
-        generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
-        for i in range(1, 4)
-    ]
-    
-    parallel_paths = await asyncio.gather(*tasks)
-    
-    # 결과 합치기
-    all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
+    if settings.AI_PROVIDER == "openai":
+        # OpenAI 전략: 참조 없이 4장 전면 병렬 생성
+        logging.info(f"[ImageGen] Using OpenAI Strategy for {content_key}")
+        tasks = [
+            generate_openai_image_task(content_key, i, prompts[i], content_type)
+            for i in range(4)
+        ]
+        image_paths = await asyncio.gather(*tasks)
+        all_paths = [p for p in image_paths if p]
+    else:
+        # Google 전략: 1장 생성 후 3장 참조 병렬 생성
+        logging.info(f"[ImageGen] Using Gemini Hybrid Strategy for {content_key}")
+        anchor_image_path = await generate_google_image_task(content_key, 0, prompts[0], content_type)
+        if not anchor_image_path:
+            return {"error": "기준 이미지 생성 실패"}
+
+        tasks = [
+            generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
+            for i in range(1, 4)
+        ]
+        parallel_paths = await asyncio.gather(*tasks)
+        all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
+
     return {"image_urls": all_paths}
 
 
 async def final_save_node(state: ArticleState):
     """최종 결과물 DB 저장"""
     db: Session = state['db_session']
+    issue_id = state['issue_id']
     
-    # 1. 상위 콘텐츠 테이블 저장
-    new_content = AiContent(
-        content_type=state["content_type"],
-        thumbnail_url=state["image_urls"][0] if state["image_urls"] else None
-    )
-    db.add(new_content)
-    db.flush()
-    
-    # 2. 상세 기사 테이블 저장
-    cat = db.query(Category).filter(Category.name == state["category_name"]).first()
-    
+    # 1. 원본 기사 정보 추출 (최대 3개)
+    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    origin_articles_data = []
+    if issue and issue.articles:
+        origin_articles_data = [
+            {"title": a.title, "url": a.origin_url}
+            for a in issue.articles[:3]
+        ]
+
+    # 2. ai_article 테이블 저장 (통합형)
     new_article = AiArticle(
-        ai_content_id=new_content.id,
+        issue_id=issue_id,
+        content_type=state["content_type"],
         title=state["final_title"],
+        thumbnail_url=state["image_urls"][0] if state["image_urls"] else None,
         editor_id=state["editor"]["id"],
-        category_id=cat.id if cat else None,
+        category_id=issue.category_id if issue else None,
         summary=state["summary"],
         body=state["final_body"],
-        image_data={"image_urls": state["image_urls"]}
+        image_data={"image_urls": state["image_urls"]},
+        origin_articles=origin_articles_data
     )
     db.add(new_article)
+    db.flush() # ID를 얻기 위해 flush
+    
+    # 3. reaction_count 테이블 초기화
+    new_reaction = ReactionCount(article_id=new_article.id)
+    db.add(new_reaction)
+    
+    # 4. 상위 이슈 처리 상태 업데이트
+    if issue:
+        issue.is_processed = True
+    
     db.commit()
     
-    logging.info(f"DB Saved: AiContent ID {new_content.id}")
+    logging.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
     return state

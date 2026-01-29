@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, BigInteger, Table, JSON, ARRAY
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, BigInteger, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql import func
+
 from app.core.database import Base
 
-# 에디터-카테고리 매핑 테이블
 class EditorCategory(Base):
     __tablename__ = "editor_category"
     id = Column(BigInteger, primary_key=True, index=True)
@@ -32,33 +33,47 @@ class RawArticle(Base):
     id = Column(BigInteger, primary_key=True)
     title = Column(String(500))
     content = Column(Text)
+    origin_url = Column(Text, nullable=False, unique=True) 
+    source = Column(String(50), nullable=False)
     category_id = Column(Integer, ForeignKey("category.id"))
     issue_id = Column(BigInteger, ForeignKey("issue.id"))
+    published_at = Column(DateTime(timezone=True), nullable=False)
+    crawled_at = Column(DateTime(timezone=True), server_default=func.now())
     
     category = relationship("Category")
+    issue = relationship("Issue", back_populates="articles")
 
 class Issue(Base):
     __tablename__ = "issue"
     id = Column(BigInteger, primary_key=True)
     issue_title = Column(String(255))
     category_id = Column(Integer, ForeignKey("category.id"))
+    batch_time = Column(DateTime(timezone=True), nullable=False)
+    is_processed = Column(Boolean, default=False)
     
-    # Issue와 연결된 기사들
-    articles = relationship("RawArticle", backref="issue")
     category = relationship("Category")
+    articles = relationship("RawArticle", back_populates="issue")
 
-class AiContent(Base):
-    __tablename__ = "ai_content"
-    id = Column(BigInteger, primary_key=True)
-    content_type = Column(String(20)) # WEBTOON, CARD_NEWS
-    thumbnail_url = Column(Text)
-    
 class AiArticle(Base):
     __tablename__ = "ai_article"
-    ai_content_id = Column(BigInteger, ForeignKey("ai_content.id"), primary_key=True)
-    title = Column(String(255))
+    id = Column(BigInteger, primary_key=True, index=True)
+    issue_id = Column(BigInteger)
+    content_type = Column(String(20), nullable=False)
+    title = Column(String(255), nullable=False)
+    thumbnail_url = Column(Text)
     editor_id = Column(Integer, ForeignKey("editor.id"))
     category_id = Column(Integer, ForeignKey("category.id"))
     summary = Column(JSONB)
     body = Column(Text)
     image_data = Column(JSONB)
+    origin_articles = Column(JSONB)
+    published_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ReactionCount(Base):
+    __tablename__ = "reaction_count"
+    article_id = Column(BigInteger, ForeignKey("ai_article.id"), primary_key=True)
+    happy_count = Column(Integer, default=0)
+    surprised_count = Column(Integer, default=0)
+    sad_count = Column(Integer, default=0)
+    angry_count = Column(Integer, default=0)
+    empathy_count = Column(Integer, default=0)
