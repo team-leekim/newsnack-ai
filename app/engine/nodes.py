@@ -197,7 +197,6 @@ async def generate_image_task(content_key: str, idx: int, prompt: str, content_t
     """개별 이미지 생성 비동기 태스크"""
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
 
-    # 텍스트 지침 강화
     instruction = "Write all text for Korean readers. Use Korean for general text, but keep proper nouns, brand names, and English acronyms in English. Ensure all text is legible."
     if content_type == "CARD_NEWS":
         instruction += " Focus on infographic elements and consistent background color."
@@ -236,24 +235,30 @@ async def image_gen_node(state: ArticleState):
     content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
-    
-    # 1. 첫 번째 이미지(기준점) 생성
-    anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
-    
-    if not anchor_image_path:
-        logging.error("기준 이미지 생성 실패")
-        return {"error": "기준 이미지 생성 실패"}
 
-    # 2. 남은 3장 병렬 생성
-    tasks = [
-        generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
-        for i in range(1, 4)
-    ]
-    
-    parallel_paths = await asyncio.gather(*tasks)
-    
-    # 결과 합치기
-    all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
+    if settings.AI_PROVIDER == "openai":
+        # OpenAI 전략: 참조 없이 4장 전면 병렬 생성
+        logging.info(f"[ImageGen] Using OpenAI Strategy for {content_key}")
+        tasks = [
+            generate_openai_image_task(content_key, i, prompts[i], content_type)
+            for i in range(4)
+        ]
+        image_paths = await asyncio.gather(*tasks)
+        all_paths = [p for p in image_paths if p]
+    else:
+        # Google 전략: 1장 생성 후 3장 참조 병렬 생성
+        logging.info(f"[ImageGen] Using Gemini Hybrid Strategy for {content_key}")
+        anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
+        if not anchor_image_path:
+            return {"error": "기준 이미지 생성 실패"}
+
+        tasks = [
+            generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
+            for i in range(1, 4)
+        ]
+        parallel_paths = await asyncio.gather(*tasks)
+        all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
+
     return {"image_urls": all_paths}
 
 
