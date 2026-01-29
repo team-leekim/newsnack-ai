@@ -41,6 +41,7 @@ class RawArticle(Base):
     crawled_at = Column(DateTime(timezone=True), server_default=func.now())
     
     category = relationship("Category")
+    issue = relationship("Issue", back_populates="articles")
 
 class Issue(Base):
     __tablename__ = "issue"
@@ -50,10 +51,8 @@ class Issue(Base):
     batch_time = Column(DateTime(timezone=True), nullable=False)
     is_processed = Column(Boolean, default=False)
     
-    articles = relationship("RawArticle", back_populates="issue_obj")
     category = relationship("Category")
-
-    RawArticle.issue_obj = relationship("Issue", back_populates="articles")
+    articles = relationship("RawArticle", back_populates="issue")
 
 class AiArticle(Base):
     __tablename__ = "ai_article"
