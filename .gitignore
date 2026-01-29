@@ -215,6 +215,10 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# all .DS_Store
+**/.DS_Store
+.DS_Store
+
 # etc
 .cursor/
 test/
