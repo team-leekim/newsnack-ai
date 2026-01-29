@@ -13,7 +13,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from .providers import ai_factory
 from .state import ArticleState, AnalysisResponse, EditorContentResponse
 from app.core.config import settings
-from app.database.models import Editor, AiContent, AiArticle, Category, EditorCategory
+from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle
 
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
@@ -177,7 +177,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
             model="gpt-image-1.5",
             prompt=final_prompt,
             n=1,
-            quality="low", #TODO: 추후 결과물 품질에 따라 조정
+            quality="medium", #TODO: 추후 결과물 품질에 따라 조정
             size="1024x1024"
         )
         
@@ -265,29 +265,42 @@ async def image_gen_node(state: ArticleState):
 async def final_save_node(state: ArticleState):
     """최종 결과물 DB 저장"""
     db: Session = state['db_session']
+    issue_id = state['issue_id']
     
-    # 1. 상위 콘텐츠 테이블 저장
-    new_content = AiContent(
-        content_type=state["content_type"],
-        thumbnail_url=state["image_urls"][0] if state["image_urls"] else None
-    )
-    db.add(new_content)
-    db.flush()
-    
-    # 2. 상세 기사 테이블 저장
-    cat = db.query(Category).filter(Category.name == state["category_name"]).first()
-    
+    # 1. 원본 기사 정보 추출 (최대 3개)
+    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    origin_articles_data = []
+    if issue and issue.articles:
+        origin_articles_data = [
+            {"title": a.title, "url": a.origin_url}
+            for a in issue.articles[:3]
+        ]
+
+    # 2. ai_article 테이블 저장 (통합형)
     new_article = AiArticle(
-        ai_content_id=new_content.id,
+        issue_id=issue_id,
+        content_type=state["content_type"],
         title=state["final_title"],
+        thumbnail_url=state["image_urls"][0] if state["image_urls"] else None,
         editor_id=state["editor"]["id"],
-        category_id=cat.id if cat else None,
+        category_id=issue.category_id if issue else None,
         summary=state["summary"],
         body=state["final_body"],
-        image_data={"image_urls": state["image_urls"]}
+        image_data={"image_urls": state["image_urls"]},
+        origin_articles=origin_articles_data
     )
     db.add(new_article)
+    db.flush() # ID를 얻기 위해 flush
+    
+    # 3. reaction_count 테이블 초기화
+    new_reaction = ReactionCount(article_id=new_article.id)
+    db.add(new_reaction)
+    
+    # 4. 상위 이슈 처리 상태 업데이트
+    if issue:
+        issue.is_processed = True
+    
     db.commit()
     
-    logging.info(f"DB Saved: AiContent ID {new_content.id}")
+    logging.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
     return state
