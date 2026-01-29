@@ -6,9 +6,9 @@ from google import genai
 from google.genai import types
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from .providers import ai_factory
 from .state import ArticleState, AnalysisResponse, EditorContentResponse
 from app.core.config import settings
 from app.database.models import Editor, AiContent, AiArticle, Category, EditorCategory
@@ -17,7 +17,8 @@ from app.database.models import Editor, AiContent, AiArticle, Category, EditorCa
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
 CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. Maintain exact same color palette and layout style. "
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=settings.GOOGLE_API_KEY)
+# 현재 설정된 프로바이더의 LLM
+llm = ai_factory.get_llm()
 client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 # 구조화된 출력용 LLM
