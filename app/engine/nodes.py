@@ -1,16 +1,17 @@
 import os
-import json
-import random
 import asyncio
 import logging
 from PIL import Image
 from google import genai
 from google.genai import types
+from sqlalchemy.sql import func
+from sqlalchemy.orm import Session
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from app.core.config import settings
-from .state import ArticleState, AnalysisResponse, EditorContentResponse
 
+from .state import ArticleState, AnalysisResponse, EditorContentResponse
+from app.core.config import settings
+from app.database.models import Editor, AiContent, AiArticle, Category, EditorCategory
 
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
@@ -24,37 +25,76 @@ analyze_llm = llm.with_structured_output(AnalysisResponse)
 editor_llm = llm.with_structured_output(EditorContentResponse)
 
 
-
 async def select_editor_node(state: ArticleState):
-    """분류된 타입에 맞는 에디터를 JSON 데이터에서 선택"""
-    # TODO: 에디터 선택 로직 개선
-    editors = state["available_editors"]
-    target_type = state["content_type"]
+    """DB에서 전문 분야(Category)가 일치하는 에디터 배정"""
+    db: Session = state["db_session"]
+    category_name = state["category_name"]
     
-    candidates = [e for e in editors if e["type"] == target_type]
-    selected = random.choice(candidates if candidates else editors)
+    # 1. 카테고리 매칭 에디터 조회
+    matched_editor = (
+        db.query(Editor)
+        .join(Editor.categories)
+        .filter(Category.name == category_name)
+        .first()
+    )
     
-    return {"editor": selected}
+    # 2. 없으면 랜덤으로 배정
+    if not matched_editor:
+        matched_editor = db.query(Editor).order_by(func.random()).first()
+
+    # DB에 에디터가 단 하나도 없는 경우 처리
+    if not matched_editor:
+        logging.error("Critical Error: No editors found in the database.")
+        raise ValueError("에디터 데이터가 DB에 존재하지 않습니다.")
+
+    logging.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
+
+    # 3. 객체를 Dict로 변환
+    return {
+        "editor": {
+            "id": matched_editor.id,
+            "name": matched_editor.name,
+            "persona_prompt": matched_editor.persona_prompt
+        }
+    }
 
 
 async def analyze_node(state: ArticleState):
-    """뉴스 분석, 키워드 추출 및 타입 분류"""
-    article = state['raw_article']
+    """뉴스 분석"""
+    context = state['raw_article_context']
+    original_title = state['raw_article_title']
     
     prompt = f"""
-    다음 뉴스를 분석해서 핵심 요약 3줄, 키워드(최대 5개),
-    그리고 콘텐츠 타입(WEBTOON 또는 CARD_NEWS)을 결정해줘.
-    내용 요약과 키워드는 반드시 한국어로 작성해야 해.
+    당신은 뉴스 큐레이션 전문가입니다. 다음 뉴스를 분석하여 제목을 최적화하고 내용을 요약하세요.
 
-    제목: {article['title']}
-    본문: {article['content']}
+    [작업 가이드라인]
+    1. 제목(title): 
+       - 원본 제목과 본문 내용을 바탕으로 기사의 **핵심 내용을 가장 잘 나타내는 짧고 간결한 제목**을 생성할 것.
+       - **최대 15자 내외**로 작성하여 한눈에 들어오도록 할 것.
+       - 독자의 흥미를 유발하되, **과장 없이 명확한 키워드**를 포함할 것.
+       - 문체를 변경하거나 감정을 섞지 말고, **객관적인 언론사 기사 제목**처럼 작성할 것.
+    2. 요약(summary):
+       - 반드시 3줄로 작성할 것.
+       - 핵심 위주로 아주 짧고 간결하게 작성할 것.
+       - 문장 끝을 '~함', '~임', '~함'과 같은 명사형 어미로 끝낼 것. (예: 삼성전자 실적 발표함, 금리 인상 결정됨)
+    3. 분류(content_type):
+       - 서사성/감정 중심이면 'WEBTOON', 정보/데이터 중심이면 'CARD_NEWS'로 분류할 것.
+
+    [분석 대상]
+    원본 제목: {original_title}
+    본문 내용: {context}
+
+    [출력 요구사항]
+    - title: 최적화된 제목
+    - summary: 명사형 어미를 사용한 3줄 요약
+    - content_type: 분류 결과
     """
     
     response = await analyze_llm.ainvoke(prompt)
-    
+
     return {
+        "final_title": response.title,
         "summary": response.summary,
-        "keywords": response.keywords,
         "content_type": response.content_type
     }
 
@@ -62,7 +102,8 @@ async def analyze_node(state: ArticleState):
 async def webtoon_creator_node(state: ArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
-    article = state['raw_article']
+    title = state['final_title']
+    context = state['raw_article_context']
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
@@ -73,12 +114,11 @@ async def webtoon_creator_node(state: ArticleState):
     2. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
     3. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
     """)
-    human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
+    human_msg = HumanMessage(content=f"제목: {title}\n내용: {context}")
     
     response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
-        "final_title": response.final_title,
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
@@ -87,7 +127,8 @@ async def webtoon_creator_node(state: ArticleState):
 async def card_news_creator_node(state: ArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
-    article = state['raw_article']
+    title = state['final_title']
+    context = state['raw_article_context']
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
@@ -103,12 +144,11 @@ async def card_news_creator_node(state: ArticleState):
     3. 모든 설명은 한국어로 작성하되, 'image_prompts' 내의 시각 묘사만 영어로 작성해줘.
     4. 디자인은 세련된 소셜 미디어 감성(Modern and trendy social media aesthetic)을 유지해.
     """)
-    human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
+    human_msg = HumanMessage(content=f"제목: {title}\n내용: {context}")
     
     response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
-        "final_title": response.final_title,
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
@@ -163,7 +203,7 @@ async def generate_image_task(content_key: str, idx: int, prompt: str, content_t
 
 async def image_gen_node(state: ArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
-    content_key = state['raw_article']['content_key']
+    content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
     
@@ -188,27 +228,31 @@ async def image_gen_node(state: ArticleState):
 
 
 async def final_save_node(state: ArticleState):
-    """최종 결과물 저장"""
-    article_data = state['raw_article']
-    content_key = article_data['content_key']
-
-    output_data = {
-        "content_key": content_key,
-        "source_article_ids": article_data['source_ids'],
-        "content_type": state["content_type"],
-        "editor": state["editor"]["name"],
-        "title": state["final_title"],
-        "body": state["final_body"],
-        "summary": state["summary"],
-        "keywords": state["keywords"],
-        "image_prompts": state["image_prompts"],
-        "images": state["image_urls"]
-    }
+    """최종 결과물 DB 저장"""
+    db: Session = state['db_session']
     
-    # TODO: S3 업로드 로직 추가
-    file_path = f"output/{content_key}/content.json"
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, ensure_ascii=False, indent=2)
-        
-    logging.info(f"최종 결과 저장: {file_path}")
+    # 1. 상위 콘텐츠 테이블 저장
+    new_content = AiContent(
+        content_type=state["content_type"],
+        thumbnail_url=state["image_urls"][0] if state["image_urls"] else None
+    )
+    db.add(new_content)
+    db.flush()
+    
+    # 2. 상세 기사 테이블 저장
+    cat = db.query(Category).filter(Category.name == state["category_name"]).first()
+    
+    new_article = AiArticle(
+        ai_content_id=new_content.id,
+        title=state["final_title"],
+        editor_id=state["editor"]["id"],
+        category_id=cat.id if cat else None,
+        summary=state["summary"],
+        body=state["final_body"],
+        image_data={"image_urls": state["image_urls"]}
+    )
+    db.add(new_article)
+    db.commit()
+    
+    logging.info(f"DB Saved: AiContent ID {new_content.id}")
     return state

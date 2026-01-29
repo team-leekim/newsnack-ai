@@ -1,36 +1,40 @@
-from typing import TypedDict, List, Optional, Literal
+from typing import TypedDict, List, Optional, Literal, Any
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 class ArticleState(TypedDict):
-    # 입력 데이터
-    raw_article: dict
-    available_editors: List[dict]
-    editor: Optional[dict]
+    # 시스템 주입
+    db_session: Session # SQLAlchemy Session
     
-    # 분석 단계 결과
+    content_key: str 
+
+    # 입력 데이터
+    issue_id: int
+    category_name: str
+    raw_article_context: str # 합쳐진 본문
+    raw_article_title: str
+    
+    # 중간 산출물
+    editor: Optional[dict] # DB Editor 객체를 Dict로 변환해서 저장
     summary: List[str]
-    keywords: List[str]
     content_type: str
     
-    # 생성 단계 결과
+    # 최종 결과
     final_title: str
     final_body: str
     image_prompts: List[str]
-    image_urls: List[str]  # 로컬 저장 경로 또는 S3 URL
-
-    error: Optional[str]
+    image_urls: List[str]
 
 
 class AnalysisResponse(BaseModel):
     """뉴스 분석 및 분류 결과"""
-    summary: List[str] = Field(description="핵심 요약 3줄 리스트")
-    keywords: List[str] = Field(description="뉴스 핵심 키워드 리스트 (최대 5개)")
+    title: str = Field(description="본문 내용을 바탕으로 최적화된 뉴스 제목")
+    summary: List[str] = Field(description="핵심 요약 3줄 리스트 (~함, ~임 문체)")
     content_type: Literal["WEBTOON", "CARD_NEWS"] = Field(description="콘텐츠 타입 분류")
 
 
 class EditorContentResponse(BaseModel):
     """에디터가 재작성한 본문 및 이미지 프롬프트"""
-    final_title: str = Field(description="에디터 말투가 반영된 새로운 제목")
     final_body: str = Field(description="에디터 말투로 재작성된 전체 본문 내용")
     image_prompts: List[str] = Field(
         min_items=4,

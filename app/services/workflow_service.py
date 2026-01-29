@@ -1,67 +1,69 @@
 import uuid
-import json
 import logging
+from sqlalchemy.orm import Session
 from pathlib import Path
 from app.engine.graph import create_graph
+from app.core.database import SessionLocal
+from app.database.models import Issue, Editor, Category
 
 class WorkflowService:
     def __init__(self):
         self.graph = create_graph()
-        # 로컬 경로 설정
-        self.base_path = Path(__file__).parent.parent.parent / "data"
-
-    def _load_local_data(self, filename: str):
-        with open(self.base_path / filename, "r", encoding="utf-8") as f:
-            return json.load(f)
 
     async def run_ai_article_pipeline(self, issue_id: int):
         """
         여러 개의 연관 기사를 하나의 맥락으로 합쳐서 단일 AI 콘텐츠 생성
         """
-        # TODO: DB 조회 방식으로 변경
-        source_article_ids = [1]
-        all_raw_articles = self._load_local_data("raw_articles.json")
-        editors = self._load_local_data("editors.json")
-
-        # 1. 요청받은 ID들에 해당하는 기사 추출
-        target_articles = [a for a in all_raw_articles if a["id"] in source_article_ids]
-        if not target_articles: return
-
-        # 2. 본문 통합
-        merged_content = "\n\n---\n\n".join([
-            f"기사 제목: {a['title']}\n본문: {a['content']}" 
-            for a in target_articles
-        ])
-
-        integrated_article = {
-            "content_key": str(uuid.uuid4()),
-            "source_ids": source_article_ids,
-            "title": target_articles[0]["title"],
-            "content": merged_content,
-            "category": target_articles[0]["category"]
-        }
-
-        # 3. 랭그래프 초기 상태 구성
-        initial_state = {
-            "raw_article": integrated_article,
-            "editor": None,
-            "available_editors": editors,
-            "summary": [],
-            "keywords": [],
-            "content_type": "",
-            "final_title": "",
-            "final_body": "",
-            "image_prompts": [],
-            "image_urls": [],
-            "error": None
-        }
-
+        db: Session = SessionLocal()
         try:
-            logging.info(f"[Workflow] Starting single pipeline for issue with {len(target_articles)} articles")
-            # 랭그래프 실행
+            # 1. DB에서 이슈 및 관련 기사 조회
+            issue = db.query(Issue).filter(Issue.id == issue_id).first()
+            
+            if not issue:
+                logging.error(f"Issue ID {issue_id} not found.")
+                return
+
+            raw_articles = issue.articles
+            if not raw_articles:
+                logging.error(f"No articles found for Issue ID {issue_id}")
+                return
+
+            # 2. 본문 통합 (프롬프트 입력용)
+            merged_content = "\n\n---\n\n".join([
+                f"기사 제목: {a.title}\n본문: {a.content}" 
+                for a in raw_articles
+            ])
+
+            generated_content_key = str(uuid.uuid4())
+
+            # 3. LangGraph 초기 상태 구성
+            initial_state = {
+                "db_session": db,
+                "issue_id": issue.id,
+                "category_name": issue.category.name if issue.category else "General",
+                "raw_article_context": merged_content,
+                "raw_article_title": issue.issue_title,
+                "content_key": generated_content_key,
+                # 결과값 초기화
+                "editor": None,
+                "summary": [],
+                "content_type": "",
+                "final_title": "",
+                "final_body": "",
+                "image_prompts": [],
+                "image_urls": []
+            }
+
+            logging.info(f"[Workflow] Starting pipeline for Issue {issue_id}")
+            
+            # LangGraph 실행
             await self.graph.ainvoke(initial_state) 
-            logging.info(f"[Workflow] Successfully generated AI content for IDs: {source_article_ids}")
+            
+            logging.info(f"[Workflow] Finished for Issue {issue_id}")
+
         except Exception as e:
-            logging.error(f"[Workflow] Error during generation for {source_article_ids}: {e}", exc_info=True)
+            logging.error(f"[Workflow] Error: {e}", exc_info=True)
+        finally:
+            db.close()
 
 workflow_service = WorkflowService()
