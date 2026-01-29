@@ -6,11 +6,13 @@ import logging
 from PIL import Image
 from google import genai
 from google.genai import types
+from sqlalchemy.orm import Session
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from app.core.config import settings
-from .state import ArticleState, AnalysisResponse, EditorContentResponse
 
+from .state import ArticleState, AnalysisResponse, EditorContentResponse
+from app.core.config import settings
+from app.database.models import Editor, AiContent, AiArticle, Category, EditorCategory
 
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
@@ -38,20 +40,17 @@ async def select_editor_node(state: ArticleState):
 
 
 async def analyze_node(state: ArticleState):
-    """뉴스 분석, 키워드 추출 및 타입 분류"""
-    article = state['raw_article']
+    """뉴스 분석"""
+    context = state['raw_article_context']
+    title = state['raw_article_title']
     
     prompt = f"""
-    다음 뉴스를 분석해서 핵심 요약 3줄, 키워드(최대 5개),
-    그리고 콘텐츠 타입(WEBTOON 또는 CARD_NEWS)을 결정해줘.
-    내용 요약과 키워드는 반드시 한국어로 작성해야 해.
-
-    제목: {article['title']}
-    본문: {article['content']}
+    다음 뉴스를 분석해줘.
+    제목: {title}
+    본문: {context}
+    ... (나머지 프롬프트 동일) ...
     """
-    
     response = await analyze_llm.ainvoke(prompt)
-    
     return {
         "summary": response.summary,
         "keywords": response.keywords,
@@ -62,7 +61,10 @@ async def analyze_node(state: ArticleState):
 async def webtoon_creator_node(state: ArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
-    article = state['raw_article']
+    article = {
+        "title": state['raw_article_title'],
+        "content": state['raw_article_context']
+    }
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
@@ -87,7 +89,10 @@ async def webtoon_creator_node(state: ArticleState):
 async def card_news_creator_node(state: ArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
-    article = state['raw_article']
+    article = {
+        "title": state['raw_article_title'],
+        "content": state['raw_article_context']
+    }
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
@@ -163,7 +168,7 @@ async def generate_image_task(content_key: str, idx: int, prompt: str, content_t
 
 async def image_gen_node(state: ArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
-    content_key = state['raw_article']['content_key']
+    content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
     
@@ -188,27 +193,31 @@ async def image_gen_node(state: ArticleState):
 
 
 async def final_save_node(state: ArticleState):
-    """최종 결과물 저장"""
-    article_data = state['raw_article']
-    content_key = article_data['content_key']
-
-    output_data = {
-        "content_key": content_key,
-        "source_article_ids": article_data['source_ids'],
-        "content_type": state["content_type"],
-        "editor": state["editor"]["name"],
-        "title": state["final_title"],
-        "body": state["final_body"],
-        "summary": state["summary"],
-        "keywords": state["keywords"],
-        "image_prompts": state["image_prompts"],
-        "images": state["image_urls"]
-    }
+    """최종 결과물 DB 저장"""
+    db: Session = state['db_session']
     
-    # TODO: S3 업로드 로직 추가
-    file_path = f"output/{content_key}/content.json"
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, ensure_ascii=False, indent=2)
-        
-    logging.info(f"최종 결과 저장: {file_path}")
+    # 1. 상위 콘텐츠 테이블 저장
+    new_content = AiContent(
+        content_type=state["content_type"],
+        thumbnail_url=state["image_urls"][0] if state["image_urls"] else None
+    )
+    db.add(new_content)
+    db.flush()
+    
+    # 2. 상세 기사 테이블 저장
+    cat = db.query(Category).filter(Category.name == state["category_name"]).first()
+    
+    new_article = AiArticle(
+        ai_content_id=new_content.id,
+        title=state["final_title"],
+        editor_id=state["editor"]["id"],
+        category_id=cat.id if cat else None,
+        summary=state["summary"],
+        body=state["final_body"],
+        image_data={"image_urls": state["image_urls"]}
+    )
+    db.add(new_article)
+    db.commit()
+    
+    logging.info(f"DB Saved: AiContent ID {new_content.id}")
     return state

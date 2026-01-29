@@ -1,24 +1,29 @@
-from typing import TypedDict, List, Optional, Literal
+from typing import TypedDict, List, Optional, Literal, Any
 from pydantic import BaseModel, Field
 
 class ArticleState(TypedDict):
-    # 입력 데이터
-    raw_article: dict
-    available_editors: List[dict]
-    editor: Optional[dict]
+    # 시스템 주입
+    db_session: Any # SQLAlchemy Session
     
-    # 분석 단계 결과
+    content_key: str 
+
+    # 입력 데이터
+    issue_id: int
+    category_name: str
+    raw_article_context: str # 합쳐진 본문
+    raw_article_title: str
+    
+    # 중간 산출물
+    editor: Optional[dict] # DB Editor 객체를 Dict로 변환해서 저장
     summary: List[str]
     keywords: List[str]
     content_type: str
     
-    # 생성 단계 결과
+    # 최종 결과
     final_title: str
     final_body: str
     image_prompts: List[str]
-    image_urls: List[str]  # 로컬 저장 경로 또는 S3 URL
-
-    error: Optional[str]
+    image_urls: List[str]
 
 
 class AnalysisResponse(BaseModel):
