@@ -5,8 +5,14 @@ class Settings(BaseSettings):
     # 환경 변수 정의
     PROJECT_NAME: str = "newsnack AI Server"
     
-    # 필수 환경 변수
-    GOOGLE_API_KEY: str
+    # AI Provider 설정 (google 또는 openai)
+    AI_PROVIDER: str = "google"
+    
+    # API Keys
+    GOOGLE_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+    
+    # Database & Storage
     DATABASE_URL: Optional[str] = None
     AWS_S3_BUCKET: Optional[str] = None
 
