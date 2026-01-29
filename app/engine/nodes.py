@@ -58,17 +58,38 @@ async def select_editor_node(state: ArticleState):
 async def analyze_node(state: ArticleState):
     """뉴스 분석"""
     context = state['raw_article_context']
-    title = state['raw_article_title']
+    original_title = state['raw_article_title']
     
     prompt = f"""
-    다음 뉴스를 분석해서 핵심 요약을 간결체로 3줄로 작성해줘.
-    그리고 콘텐츠 타입(WEBTOON 또는 CARD_NEWS)을 결정해줘.
-    내용 요약은 반드시 한국어로 작성해.
-    제목: {title}
-    본문: {context}
+    당신은 뉴스 큐레이션 전문가입니다. 다음 뉴스를 분석하여 제목을 최적화하고 내용을 요약하세요.
+
+    [작업 가이드라인]
+    1. 제목(title): 
+       - 원본 제목과 본문 내용을 바탕으로 기사의 **핵심 내용을 가장 잘 나타내는 짧고 간결한 제목**을 생성할 것.
+       - **최대 15자 내외**로 작성하여 한눈에 들어오도록 할 것.
+       - 독자의 흥미를 유발하되, **과장 없이 명확한 키워드**를 포함할 것.
+       - 문체를 변경하거나 감정을 섞지 말고, **객관적인 언론사 기사 제목**처럼 작성할 것.
+    2. 요약(summary):
+       - 반드시 3줄로 작성할 것.
+       - 핵심 위주로 아주 짧고 간결하게 작성할 것.
+       - 문장 끝을 '~함', '~임', '~함'과 같은 명사형 어미로 끝낼 것. (예: 삼성전자 실적 발표함, 금리 인상 결정됨)
+    3. 분류(content_type):
+       - 서사성/감정 중심이면 'WEBTOON', 정보/데이터 중심이면 'CARD_NEWS'로 분류할 것.
+
+    [분석 대상]
+    원본 제목: {original_title}
+    본문 내용: {context}
+
+    [출력 요구사항]
+    - title: 최적화된 제목
+    - summary: 명사형 어미를 사용한 3줄 요약
+    - content_type: 분류 결과
     """
+    
     response = await analyze_llm.ainvoke(prompt)
+
     return {
+        "final_title": response.title,
         "summary": response.summary,
         "content_type": response.content_type
     }
@@ -77,10 +98,8 @@ async def analyze_node(state: ArticleState):
 async def webtoon_creator_node(state: ArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
-    article = {
-        "title": state['raw_article_title'],
-        "content": state['raw_article_context']
-    }
+    title = state['final_title']
+    context = state['raw_article_context']
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
@@ -91,12 +110,11 @@ async def webtoon_creator_node(state: ArticleState):
     2. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
     3. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
     """)
-    human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
+    human_msg = HumanMessage(content=f"제목: {title}\n내용: {context}")
     
     response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
-        "final_title": response.final_title,
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
@@ -105,10 +123,8 @@ async def webtoon_creator_node(state: ArticleState):
 async def card_news_creator_node(state: ArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
-    article = {
-        "title": state['raw_article_title'],
-        "content": state['raw_article_context']
-    }
+    title = state['final_title']
+    context = state['raw_article_context']
     
     system_msg = SystemMessage(content=f"""
     {editor['persona_prompt']}
@@ -124,12 +140,11 @@ async def card_news_creator_node(state: ArticleState):
     3. 모든 설명은 한국어로 작성하되, 'image_prompts' 내의 시각 묘사만 영어로 작성해줘.
     4. 디자인은 세련된 소셜 미디어 감성(Modern and trendy social media aesthetic)을 유지해.
     """)
-    human_msg = HumanMessage(content=f"제목: {article['title']}\n내용: {article['content']}")
+    human_msg = HumanMessage(content=f"제목: {title}\n내용: {context}")
     
     response = await editor_llm.ainvoke([system_msg, human_msg])
     
     return {
-        "final_title": response.final_title,
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
