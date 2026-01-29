@@ -26,17 +26,33 @@ analyze_llm = llm.with_structured_output(AnalysisResponse)
 editor_llm = llm.with_structured_output(EditorContentResponse)
 
 
-
 async def select_editor_node(state: ArticleState):
-    """분류된 타입에 맞는 에디터를 JSON 데이터에서 선택"""
-    # TODO: 에디터 선택 로직 개선
-    editors = state["available_editors"]
-    target_type = state["content_type"]
+    """DB에서 전문 분야(Category)가 일치하는 에디터 배정"""
+    db: Session = state["db_session"]
+    category_name = state["category_name"]
     
-    candidates = [e for e in editors if e["type"] == target_type]
-    selected = random.choice(candidates if candidates else editors)
+    # 1. 카테고리 매칭 에디터 조회
+    matched_editor = (
+        db.query(Editor)
+        .join(Editor.categories)
+        .filter(Category.name == category_name)
+        .first()
+    )
     
-    return {"editor": selected}
+    # 2. 없으면 아무나 배정
+    if not matched_editor:
+        matched_editor = db.query(Editor).first()
+        
+    logging.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
+
+    # 3. 객체를 Dict로 변환
+    return {
+        "editor": {
+            "id": matched_editor.id,
+            "name": matched_editor.name,
+            "persona_prompt": matched_editor.persona_prompt
+        }
+    }
 
 
 async def analyze_node(state: ArticleState):
