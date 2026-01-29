@@ -42,7 +42,12 @@ async def select_editor_node(state: ArticleState):
     # 2. 없으면 아무나 배정
     if not matched_editor:
         matched_editor = db.query(Editor).first()
-        
+
+    # DB에 에디터가 단 하나도 없는 경우 처리
+    if not matched_editor:
+        logging.error("Critical Error: No editors found in the database.")
+        raise ValueError("에디터 데이터가 DB에 존재하지 않습니다.")
+
     logging.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
 
     # 3. 객체를 Dict로 변환
