@@ -1,6 +1,8 @@
 import os
 import asyncio
 import logging
+import base64
+from io import BytesIO
 from PIL import Image
 from google import genai
 from google.genai import types
@@ -162,6 +164,33 @@ def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
     file_path = os.path.join(folder_path, f"{idx}.png")
     img.save(file_path)
     return file_path
+
+
+async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
+    """OpenAI를 사용한 독립적 이미지 생성"""
+    client = ai_factory.get_image_client()
+    style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
+    final_prompt = f"{style} {prompt}. Ensure all text is in Korean if any."
+
+    try:
+        response = await client.images.generate(
+            model="gpt-image-1.5",
+            prompt=final_prompt,
+            n=1,
+            quality="low", #TODO: 추후 결과물 품질에 따라 조정
+            size="1024x1024"
+        )
+        
+        # Base64 데이터 추출 및 PIL 이미지 변환
+        b64_data = response.data[0].b64_json
+        img_data = base64.b64decode(b64_data)
+        img = Image.open(BytesIO(img_data))
+        
+        return save_local_image(content_key, idx, img)
+        
+    except Exception as e:
+        logging.error(f"Error generating OpenAI image {idx}: {e}")
+        return None
 
 
 async def generate_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
