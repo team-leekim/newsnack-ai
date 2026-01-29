@@ -1,11 +1,10 @@
 import os
-import json
-import random
 import asyncio
 import logging
 from PIL import Image
 from google import genai
 from google.genai import types
+from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -39,9 +38,9 @@ async def select_editor_node(state: ArticleState):
         .first()
     )
     
-    # 2. 없으면 아무나 배정
+    # 2. 없으면 랜덤으로 배정
     if not matched_editor:
-        matched_editor = db.query(Editor).first()
+        matched_editor = db.query(Editor).order_by(func.random()).first()
 
     # DB에 에디터가 단 하나도 없는 경우 처리
     if not matched_editor:
