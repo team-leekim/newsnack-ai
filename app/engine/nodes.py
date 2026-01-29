@@ -167,7 +167,7 @@ def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
 
 
 async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
-    """OpenAI를 사용한 독립적 이미지 생성"""
+    """OpenAI를 사용한 개별 이미지 생성"""
     client = ai_factory.get_image_client()
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
     final_prompt = f"{style} {prompt}. Ensure all text is in Korean if any."
@@ -193,8 +193,8 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         return None
 
 
-async def generate_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
-    """개별 이미지 생성 비동기 태스크"""
+async def generate_google_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
+    """Gemini를 사용한 개별 이미지 생성"""
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
 
     instruction = "Write all text for Korean readers. Use Korean for general text, but keep proper nouns, brand names, and English acronyms in English. Ensure all text is legible."
@@ -248,12 +248,12 @@ async def image_gen_node(state: ArticleState):
     else:
         # Google 전략: 1장 생성 후 3장 참조 병렬 생성
         logging.info(f"[ImageGen] Using Gemini Hybrid Strategy for {content_key}")
-        anchor_image_path = await generate_image_task(content_key, 0, prompts[0], content_type)
+        anchor_image_path = await generate_google_image_task(content_key, 0, prompts[0], content_type)
         if not anchor_image_path:
             return {"error": "기준 이미지 생성 실패"}
 
         tasks = [
-            generate_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
+            generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
             for i in range(1, 4)
         ]
         parallel_paths = await asyncio.gather(*tasks)
