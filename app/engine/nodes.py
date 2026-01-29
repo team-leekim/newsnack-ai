@@ -61,10 +61,11 @@ async def analyze_node(state: ArticleState):
     title = state['raw_article_title']
     
     prompt = f"""
-    다음 뉴스를 분석해줘.
+    다음 뉴스를 분석해서 핵심 요약을 간결체로 3줄로 작성해줘.
+    그리고 콘텐츠 타입(WEBTOON 또는 CARD_NEWS)을 결정해줘.
+    내용 요약은 반드시 한국어로 작성해.
     제목: {title}
     본문: {context}
-    ... (나머지 프롬프트 동일) ...
     """
     response = await analyze_llm.ainvoke(prompt)
     return {
