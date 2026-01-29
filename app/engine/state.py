@@ -1,9 +1,10 @@
 from typing import TypedDict, List, Optional, Literal, Any
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 class ArticleState(TypedDict):
     # 시스템 주입
-    db_session: Any # SQLAlchemy Session
+    db_session: Session # SQLAlchemy Session
     
     content_key: str 
 
