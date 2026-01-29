@@ -70,7 +70,6 @@ async def analyze_node(state: ArticleState):
     response = await analyze_llm.ainvoke(prompt)
     return {
         "summary": response.summary,
-        "keywords": response.keywords,
         "content_type": response.content_type
     }
 

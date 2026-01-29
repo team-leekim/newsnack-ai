@@ -16,7 +16,6 @@ class ArticleState(TypedDict):
     # 중간 산출물
     editor: Optional[dict] # DB Editor 객체를 Dict로 변환해서 저장
     summary: List[str]
-    keywords: List[str]
     content_type: str
     
     # 최종 결과
@@ -29,7 +28,6 @@ class ArticleState(TypedDict):
 class AnalysisResponse(BaseModel):
     """뉴스 분석 및 분류 결과"""
     summary: List[str] = Field(description="핵심 요약 3줄 리스트")
-    keywords: List[str] = Field(description="뉴스 핵심 키워드 리스트 (최대 5개)")
     content_type: Literal["WEBTOON", "CARD_NEWS"] = Field(description="콘텐츠 타입 분류")
 
 

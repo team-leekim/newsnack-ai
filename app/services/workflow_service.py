@@ -47,7 +47,6 @@ class WorkflowService:
                 # 결과값 초기화
                 "editor": None,
                 "summary": [],
-                "keywords": [],
                 "content_type": "",
                 "final_title": "",
                 "final_body": "",
