@@ -173,7 +173,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
 
     try:
         response = await client.images.generate(
-            model="gpt-image-1.5",
+            model=settings.OPENAI_IMAGE_MODEL,
             prompt=final_prompt,
             n=1,
             quality="medium", #TODO: 추후 결과물 품질에 따라 조정
@@ -212,7 +212,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model=settings.GOOGLE_IMAGE_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=['IMAGE'],

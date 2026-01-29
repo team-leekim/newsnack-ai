@@ -6,8 +6,14 @@ class Settings(BaseSettings):
     # 환경 변수 정의
     PROJECT_NAME: str = "newsnack AI Server"
     
-    # AI Provider 설정
+    # AI Provider
     AI_PROVIDER: Literal["google", "openai"] = "google"
+
+    # AI Models
+    GOOGLE_CHAT_MODEL: str = "gemini-2.5-flash-lite"
+    OPENAI_CHAT_MODEL: str = "gpt-5-nano"
+    GOOGLE_IMAGE_MODEL: str = "gemini-3-pro-image-preview"
+    OPENAI_IMAGE_MODEL: str = "gpt-image-1.5"
     
     # API Keys
     GOOGLE_API_KEY: Optional[str] = None

@@ -14,13 +14,13 @@ class AIProviderFactory:
         """환경 변수에 설정된 프로바이더에 맞는 LLM 객체 반환"""
         if settings.AI_PROVIDER == "openai":
             return ChatOpenAI(
-                model="gpt-5-nano",
+                model=settings.OPENAI_CHAT_MODEL,
                 openai_api_key=settings.OPENAI_API_KEY,
                 temperature=temperature
             )
         else:
             return ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash-lite",
+                model=settings.GOOGLE_CHAT_MODEL,
                 google_api_key=settings.GOOGLE_API_KEY,
                 temperature=temperature
             )
@@ -29,7 +29,7 @@ class AIProviderFactory:
         """환경 변수에 설정된 프로바이더에 맞는 이미지 생성 클라이언트 반환"""
         if settings.AI_PROVIDER == "openai":
             if not self._openai_client:
-                self._openai_client = openai.Image(api_key=settings.OPENAI_API_KEY)
+                self._openai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             return self._openai_client
         else:
             if not self._google_client:
