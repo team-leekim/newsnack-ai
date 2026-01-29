@@ -21,7 +21,6 @@ CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, soli
 
 # 현재 설정된 프로바이더의 LLM
 llm = ai_factory.get_llm()
-client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
@@ -195,6 +194,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
 
 async def generate_google_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
     """Gemini를 사용한 개별 이미지 생성"""
+    client = ai_factory.get_image_client()
     style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
 
     instruction = "Write all text for Korean readers. Use Korean for general text, but keep proper nouns, brand names, and English acronyms in English. Ensure all text is legible."
