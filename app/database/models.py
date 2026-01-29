@@ -5,7 +5,6 @@ from sqlalchemy.sql import func
 
 from app.core.database import Base
 
-# 에디터-카테고리 매핑 테이블
 class EditorCategory(Base):
     __tablename__ = "editor_category"
     id = Column(BigInteger, primary_key=True, index=True)
@@ -34,8 +33,12 @@ class RawArticle(Base):
     id = Column(BigInteger, primary_key=True)
     title = Column(String(500))
     content = Column(Text)
+    origin_url = Column(Text, nullable=False, unique=True) 
+    source = Column(String(50), nullable=False)
     category_id = Column(Integer, ForeignKey("category.id"))
     issue_id = Column(BigInteger, ForeignKey("issue.id"))
+    published_at = Column(DateTime(timezone=True), nullable=False)
+    crawled_at = Column(DateTime(timezone=True), server_default=func.now())
     
     category = relationship("Category")
 
@@ -45,15 +48,17 @@ class Issue(Base):
     issue_title = Column(String(255))
     category_id = Column(Integer, ForeignKey("category.id"))
     batch_time = Column(DateTime(timezone=True), nullable=False)
-    is_processed = Column(Boolean, default=False) # 처리 완료 여부 추가
+    is_processed = Column(Boolean, default=False)
     
-    articles = relationship("RawArticle", backref="issue")
+    articles = relationship("RawArticle", back_populates="issue_obj")
     category = relationship("Category")
+
+    RawArticle.issue_obj = relationship("Issue", back_populates="articles")
 
 class AiArticle(Base):
     __tablename__ = "ai_article"
     id = Column(BigInteger, primary_key=True, index=True)
-    issue_id = Column(BigInteger) # FK 제약 없음 (DW 고려)
+    issue_id = Column(BigInteger)
     content_type = Column(String(20), nullable=False)
     title = Column(String(255), nullable=False)
     thumbnail_url = Column(Text)
