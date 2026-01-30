@@ -394,6 +394,7 @@ async def generate_openai_audio_task(full_script: str):
         model=settings.OPENAI_TTS_MODEL,
         voice=settings.OPENAI_TTS_VOICE,
         input=full_script,
+        instructions=settings.OPENAI_TTS_INSTRUCTIONS
     ) as response:
         # 전체 오디오 바이너리를 메모리로 읽어옴
         audio_bytes = await response.read()

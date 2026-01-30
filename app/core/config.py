@@ -16,7 +16,14 @@ class Settings(BaseSettings):
     OPENAI_IMAGE_MODEL: str = "gpt-image-1.5"
     OPENAI_TTS_MODEL: str = "gpt-4o-mini-tts"
     OPENAI_TTS_VOICE: str = "marin"
-    OPENAI_TTS_INSTRUCTIONS: str = "뉴스 전문 아나운서처럼 신뢰감 있고 명확한 톤으로 발음해줘. 문장 사이의 호흡을 적절히 유지해줘."
+    OPENAI_TTS_INSTRUCTIONS = """
+    A natural, conversational voice of a smart and friendly 'Otter' character in the late 20s. 
+    The tone is exceptionally bright, energetic, and engaging, like a 'smart friend' enthusiastically explaining an interesting topic. 
+    Avoid a rigid broadcast style. Use a fluid, melodic intonation with a 'soft and cute' edge, yet remain professional and trustworthy. 
+    The delivery should be lighthearted, with natural pauses for breath and thought, as if the speaker is genuinely excited about the news. 
+    Ensure sentence endings are smooth and friendly (not formal or clipped). 
+    The overall vibe is 'intelligent, approachable, and bubbly'.
+    """
 
     # API Keys
     GOOGLE_API_KEY: Optional[str] = None
