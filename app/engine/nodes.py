@@ -474,8 +474,7 @@ async def save_today_newsnack_node(state: TodayNewsnackState):
     # DB 저장
     new_snack = TodayNewsnack(
         audio_url=file_path,
-        briefing_articles=articles_data,
-        published_at=datetime.now()
+        briefing_articles=articles_data
     )
     
     db.add(new_snack)
