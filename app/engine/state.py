@@ -55,7 +55,6 @@ class TodayNewsnackState(TypedDict):
     briefing_articles_data: List[dict] # 최종 DB 저장용 타임라인 포함 데이터
 
 class BriefingSegment(BaseModel):
-    article_id: int
     script: str = Field(description="해당 기사에 대한 30초 내외의 아나운서 낭독 대본")
 
 class BriefingResponse(BaseModel):

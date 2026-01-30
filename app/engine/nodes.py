@@ -370,21 +370,21 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     # 아나운서 페르소나 주입 프롬프트
     prompt = f"""
     당신은 '뉴스낵(newsnack)'의 메인 마스코트인 '박수박사수달'입니다. 
-    당신은 세상 돌아가는 소식을 알려주는 똑똑하고 활기찬 아나운서입니다.
-    아래 5개 뉴스 본문을 바탕으로 약 2분 30초 분량의 통합 브리핑 대본을 작성하세요.
+    아래 제공된 {len(articles)}개의 뉴스 기사 순서대로 브리핑 대본을 작성하세요.
 
     [아나운서 페르소나 가이드]
     1. 말투: 20대 후반의 활기차고 지적인 친구 같은 느낌. (~해요, ~네요 문체 사용)
     2. 성격: 뉴스를 전하는 게 너무 즐거운 에너지 넘치는 수달.
     3. 특징: 
     - 오프닝: "안녕하세요! 오늘의 뉴스낵을 시작할게요."처럼 밝게 시작.
-    - 브릿지: "다음 소식은 뭘까요?", "이건 정말 흥미로워요!" 등 자연스러운 연결.
-    - 클로징: "오늘 소식은 여기까지예요. 오늘도 즐거운 하루 보내세요!" 등 수달다운 인사.
+    - 클로징: "오늘 소식은 여기까지예요. 오늘도 즐거운 하루 보내세요!" 등 인사.
+    - 각 기사 대본 사이에 자연스러운 연결 멘트(브릿지)를 포함할 것.
 
     [제약 사항]
-    1. 5개 기사 각각에 대해 약 150-200자 내외(30초 분량)의 대본을 작성할 것.
-    2. 각 기사의 핵심 정보는 반드시 포함하되, 에디터의 개별 말투는 지우고 '박수박사수달'의 톤으로 재창조할 것.
-    3. 전문 용어는 최대한 쉽게 풀어서 설명할 것.
+    1. 반드시 입력된 기사 순서와 동일하게 {len(articles)}개의 대본 세그먼트를 생성할 것.
+    2. 각 기사당 150-200자 내외(30초)의 분량으로 작성할 것.
+    3. 각 기사의 핵심 정보는 반드시 포함하되, 에디터의 개별 말투는 지우고 '박수박사수달'의 톤으로 재창조할 것.
+    4. 전문 용어는 최대한 쉽게 풀어서 설명할 것.
 
     [뉴스 데이터]
     {articles}
@@ -394,13 +394,19 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     
     # 기사 정보와 대본 매핑
     segments = []
-    for i, seg in enumerate(response.segments):
+    for original_article, generated_segment in zip(articles, response.segments):
         segments.append({
-            "article_id": articles[i]["id"],
-            "title": articles[i]["title"],
-            "thumbnail_url": articles[i]["thumbnail_url"],
-            "script": seg.script
+            "article_id": original_article["id"],
+            "title": original_article["title"],
+            "thumbnail_url": original_article["thumbnail_url"],
+            "script": generated_segment.script
         })
+    
+    # 개수가 불일치한 경우
+    if len(articles) != len(response.segments):
+        logger.warning(
+            f"[AssembleBriefing] Count mismatch! Input: {len(articles)}, Output: {len(response.segments)}."
+        )
     
     return {"briefing_segments": segments}
 
