@@ -54,13 +54,13 @@ def create_today_newsnack_graph():
     workflow.add_node("select_hot_articles", select_hot_articles_node)
     workflow.add_node("assemble_briefing", assemble_briefing_node)
     workflow.add_node("generate_audio", generate_audio_node)
-    workflow.add_node("save_snack", save_today_newsnack_node)
+    workflow.add_node("save_today_newsnack", save_today_newsnack_node)
 
     # 엣지 연결
     workflow.set_entry_point("select_hot_articles")
     workflow.add_edge("select_hot_articles", "assemble_briefing")
     workflow.add_edge("assemble_briefing", "generate_audio")
-    workflow.add_edge("generate_audio", "save_snack")
-    workflow.add_edge("save_snack", END)
+    workflow.add_edge("generate_audio", "save_today_newsnack")
+    workflow.add_edge("save_today_newsnack", END)
 
     return workflow.compile()
