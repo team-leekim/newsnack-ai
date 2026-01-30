@@ -9,11 +9,13 @@ from google.genai import types
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 from langchain_core.messages import SystemMessage, HumanMessage
+from datetime import datetime, timedelta
 
 from .providers import ai_factory
-from .state import ArticleState, AnalysisResponse, EditorContentResponse
+from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle
+from app.utils.audio import get_audio_duration_from_bytes, calculate_article_timelines
 
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
@@ -25,6 +27,7 @@ llm = ai_factory.get_llm()
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
 editor_llm = llm.with_structured_output(EditorContentResponse)
+briefing_llm = llm.with_structured_output(BriefingResponse)
 
 
 async def select_editor_node(state: ArticleState):
@@ -304,3 +307,117 @@ async def final_save_node(state: ArticleState):
     
     logging.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
     return state
+
+
+async def select_hot_articles_node(state: TodayNewsnackState):
+    """대상 기사 선정 노드"""
+    db: Session = state["db_session"]
+    
+    # 1. 최근 기사 중에서 화제성 판단
+    time_limit = datetime.now() - timedelta(days=1)
+    
+    # 2. 연관 기사 수 계산
+    hot_articles_query = (
+        db.query(
+            AiArticle,
+            func.count(RawArticle.id).label("raw_article_count")
+        )
+        .join(RawArticle, AiArticle.issue_id == RawArticle.issue_id)
+        .filter(AiArticle.published_at >= time_limit)
+        .group_by(AiArticle.id)
+        .order_by(func.count(RawArticle.id).desc()) # 연관 기사 많은 순
+        .limit(5)
+        .all()
+    )
+
+    selected = [
+        {
+            "id": item[0].id,
+            "title": item[0].title,
+            "body": item[0].body,
+            "thumbnail_url": item[0].thumbnail_url
+        } for item in hot_articles_query
+    ]
+    
+    logging.info(f"[TodayNewsnack] Selected {len(selected)} hot articles based on raw article count.")
+    
+    return {"selected_articles": selected}
+
+
+async def assemble_briefing_node(state: TodayNewsnackState):
+    """구조화된 대본 생성 노드"""
+    articles = state["selected_articles"]
+    
+    # 아나운서 페르소나 주입 프롬프트
+    prompt = f"""
+    당신은 '뉴스낵(newsnack)'의 메인 마스코트인 '박수박사수달'입니다. 
+    당신은 세상 돌아가는 소식을 알려주는 똑똑하고 활기찬 아나운서입니다.
+    아래 5개 뉴스 본문을 바탕으로 약 2분 30초 분량의 통합 브리핑 대본을 작성하세요.
+
+    [아나운서 페르소나 가이드]
+    1. 말투: 20대 후반의 활기차고 지적인 친구 같은 느낌. (~해요, ~네요 문체 사용)
+    2. 성격: 뉴스를 전하는 게 너무 즐거운 에너지 넘치는 수달.
+    3. 특징: 
+    - 오프닝: "안녕하세요! 오늘의 뉴스낵을 시작할게요."처럼 밝게 시작.
+    - 브릿지: "다음 소식은 뭘까요?", "이건 정말 흥미로워요!" 등 자연스러운 연결.
+    - 클로징: "오늘 소식은 여기까지예요. 오늘도 즐거운 하루 보내세요!" 등 수달다운 인사.
+
+    [제약 사항]
+    1. 5개 기사 각각에 대해 약 150-200자 내외(30초 분량)의 대본을 작성할 것.
+    2. 각 기사의 핵심 정보는 반드시 포함하되, 에디터의 개별 말투는 지우고 '박수박사수달'의 톤으로 재창조할 것.
+    3. 전문 용어는 최대한 쉽게 풀어서 설명할 것.
+
+    [뉴스 데이터]
+    {articles}
+    """
+    
+    response = await briefing_llm.ainvoke(prompt)
+    
+    # 기사 정보와 대본 매핑
+    segments = []
+    for i, seg in enumerate(response.segments):
+        segments.append({
+            "article_id": articles[i]["id"],
+            "title": articles[i]["title"],
+            "thumbnail_url": articles[i]["thumbnail_url"],
+            "script": seg.script
+        })
+    
+    return {"briefing_segments": segments}
+
+
+async def generate_openai_audio_task(full_script: str):
+    """OpenAI 전용 오디오 생성 태스크"""
+    client = ai_factory.get_audio_client()
+    
+    async with client.audio.speech.with_streaming_response.create(
+        model=settings.OPENAI_TTS_MODEL,
+        voice=settings.OPENAI_TTS_VOICE,
+        input=full_script,
+    ) as response:
+        # 전체 오디오 바이너리를 메모리로 읽어옴
+        audio_bytes = await response.read()
+    
+    return audio_bytes
+
+
+async def generate_audio_node(state: TodayNewsnackState):
+    """단일 오디오 생성 및 타임라인 계산 노드"""
+    segments = state["briefing_segments"]
+    # 5개 기사 대본을 하나로 합침
+    full_script = " ".join([s["script"] for s in segments])
+    
+    if settings.AI_PROVIDER == "openai":
+        audio_bytes = await generate_openai_audio_task(full_script)
+    else:
+        # TODO: 추후 Google TTS 태스크 구현
+        raise NotImplementedError("Google TTS is not implemented yet.")
+    
+    # 오디오 길이 측정 및 타임라인 계산
+    duration = get_audio_duration_from_bytes(audio_bytes)
+    briefing_articles_data = calculate_article_timelines(segments, duration)
+    
+    return {
+        "total_audio_bytes": audio_bytes,
+        "briefing_articles_data": briefing_articles_data
+    }
