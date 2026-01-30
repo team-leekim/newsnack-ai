@@ -36,5 +36,15 @@ class AIProviderFactory:
                 self._google_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
             return self._google_client
 
+    def get_audio_client(self):
+        """오디오 처리를 위한 클라이언트 반환"""
+        if settings.AI_PROVIDER == "openai":
+            if not self._openai_client:
+                self._openai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            return self._openai_client
+        else:
+            # TODO: Google TTS 도입 시 추가
+            return None
+
 # 인스턴스 하나만 생성해서 공유
 ai_factory = AIProviderFactory()
