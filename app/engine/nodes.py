@@ -1,4 +1,5 @@
 import os
+import uuid
 import asyncio
 import logging
 import base64
@@ -14,7 +15,7 @@ from datetime import datetime, timedelta
 from .providers import ai_factory
 from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
-from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle
+from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
 from app.utils.audio import get_audio_duration_from_bytes, calculate_article_timelines
 
 # 스타일 래퍼 정의
@@ -424,3 +425,37 @@ async def generate_audio_node(state: TodayNewsnackState):
         "total_audio_bytes": audio_bytes,
         "briefing_articles_data": briefing_articles_data
     }
+
+
+def save_local_audio(audio_bytes: bytes) -> str:
+    """오디오 로컬 저장 공통 유틸"""
+    folder_path = os.makedirs("output", exist_ok=True)
+    content_key = str(uuid.uuid4())
+    file_path = os.path.join(folder_path, f"{content_key}.mp3")
+    with open(file_path, "wb") as f:
+        f.write(audio_bytes)
+    return file_path
+
+
+async def save_today_newsnack_node(state: TodayNewsnackState):
+    """생성된 오디오 및 타임라인 저장 노드"""
+    db: Session = state["db_session"]
+    audio_bytes = state["total_audio_bytes"]
+    articles_data = state["briefing_articles_data"]
+    
+    # 생성된 오디오 저장
+    # TODO: S3 업로드 로직으로 변경
+    file_path = save_local_audio(audio_bytes)
+    
+    # DB 저장
+    new_snack = TodayNewsnack(
+        audio_url=file_path,
+        briefing_articles=articles_data,
+        published_at=datetime.now()
+    )
+    
+    db.add(new_snack)
+    db.commit()
+    
+    logging.info(f"[TodayNewsnack] Saved to DB. ID: {new_snack.id}, Path: {file_path}")
+    return state
