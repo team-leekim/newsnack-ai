@@ -2,17 +2,18 @@ import uuid
 import logging
 from sqlalchemy.orm import Session
 from pathlib import Path
-from app.engine.graph import create_graph
+from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category
 
 class WorkflowService:
     def __init__(self):
-        self.graph = create_graph()
+        self.graph = create_ai_article_graph()
+        self.newsnack_graph = create_today_newsnack_graph()
 
     async def run_ai_article_pipeline(self, issue_id: int):
         """
-        여러 개의 연관 기사를 하나의 맥락으로 합쳐서 단일 AI 콘텐츠 생성
+        AI 기사 생성 파이프라인 실행
         """
         db: Session = SessionLocal()
         try:
@@ -63,6 +64,28 @@ class WorkflowService:
 
         except Exception as e:
             logging.error(f"[Workflow] Error: {e}", exc_info=True)
+        finally:
+            db.close()
+
+    async def run_today_newsnack_pipeline(self):
+        """오늘의 뉴스낵 생성 파이프라인 실행"""
+        db = SessionLocal()
+        try:
+            initial_state = {
+                "db_session": db,
+                "selected_articles": [],
+                "briefing_segments": [],
+                "total_audio_bytes": b"",
+                "audio_url": "",
+                "briefing_articles_data": []
+            }
+            
+            logging.info("[Workflow] Starting Today's Newsnack Pipeline")
+            await self.newsnack_graph.ainvoke(initial_state)
+            logging.info("[Workflow] Today's Newsnack Pipeline Completed")
+            
+        except Exception as e:
+            logging.error(f"[Workflow] Error in Newsnack Pipeline: {e}", exc_info=True)
         finally:
             db.close()
 
