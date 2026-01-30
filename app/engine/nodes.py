@@ -330,6 +330,8 @@ async def select_hot_articles_node(state: TodayNewsnackState):
         .all()
     )
 
+    # TODO: 기간 내 선정된 기사가 5개 미만일 경우 예외 처리 필요
+
     selected = [
         {
             "id": item[0].id,
