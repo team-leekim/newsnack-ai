@@ -77,3 +77,16 @@ class ReactionCount(Base):
     sad_count = Column(Integer, default=0)
     angry_count = Column(Integer, default=0)
     empathy_count = Column(Integer, default=0)
+
+class TodayNewsnack(Base):
+    __tablename__ = "today_newsnack"
+
+    id = Column(BigInteger, primary_key=True, index=True)
+    audio_url = Column(Text, nullable=False)
+    
+    briefing_articles = Column(JSONB, nullable=False)
+    
+    published_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    def __repr__(self):
+        return f"<TodayNewsnack(id={self.id}, published_at={self.published_at})>"

@@ -1,4 +1,5 @@
 import os
+import uuid
 import asyncio
 import logging
 import base64
@@ -9,11 +10,15 @@ from google.genai import types
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 from langchain_core.messages import SystemMessage, HumanMessage
+from datetime import datetime, timedelta
 
 from .providers import ai_factory
-from .state import ArticleState, AnalysisResponse, EditorContentResponse
+from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
-from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle
+from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
+from app.utils.audio import get_audio_duration_from_bytes, calculate_article_timelines
+
+logger = logging.getLogger(__name__)
 
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
@@ -25,6 +30,7 @@ llm = ai_factory.get_llm()
 # 구조화된 출력용 LLM
 analyze_llm = llm.with_structured_output(AnalysisResponse)
 editor_llm = llm.with_structured_output(EditorContentResponse)
+briefing_llm = llm.with_structured_output(BriefingResponse)
 
 
 async def select_editor_node(state: ArticleState):
@@ -46,10 +52,10 @@ async def select_editor_node(state: ArticleState):
 
     # DB에 에디터가 단 하나도 없는 경우 처리
     if not matched_editor:
-        logging.error("Critical Error: No editors found in the database.")
+        logger.error("Critical Error: No editors found in the database.")
         raise ValueError("에디터 데이터가 DB에 존재하지 않습니다.")
 
-    logging.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
+    logger.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
 
     # 3. 객체를 Dict로 변환
     return {
@@ -176,7 +182,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
             model=settings.OPENAI_IMAGE_MODEL,
             prompt=final_prompt,
             n=1,
-            quality="medium", #TODO: 추후 결과물 품질에 따라 조정
+            quality="low", #TODO: 추후 결과물 품질에 따라 조정
             size="1024x1024"
         )
         
@@ -188,7 +194,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         return save_local_image(content_key, idx, img)
         
     except Exception as e:
-        logging.error(f"Error generating OpenAI image {idx}: {e}")
+        logger.error(f"Error generating OpenAI image {idx}: {e}")
         return None
 
 
@@ -226,7 +232,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         if img:
             return save_local_image(content_key, idx, img)
     except Exception as e:
-        logging.error(f"Error generating image {idx}: {e}")
+        logger.error(f"Error generating image {idx}: {e}")
     return None
 
 
@@ -238,7 +244,7 @@ async def image_gen_node(state: ArticleState):
 
     if settings.AI_PROVIDER == "openai":
         # OpenAI 전략: 참조 없이 4장 전면 병렬 생성
-        logging.info(f"[ImageGen] Using OpenAI Strategy for {content_key}")
+        logger.info(f"[ImageGen] Using OpenAI for {content_key}")
         tasks = [
             generate_openai_image_task(content_key, i, prompts[i], content_type)
             for i in range(4)
@@ -247,7 +253,7 @@ async def image_gen_node(state: ArticleState):
         all_paths = [p for p in image_paths if p]
     else:
         # Google 전략: 1장 생성 후 3장 참조 병렬 생성
-        logging.info(f"[ImageGen] Using Gemini Hybrid Strategy for {content_key}")
+        logger.info(f"[ImageGen] Using Gemini for {content_key}")
         anchor_image_path = await generate_google_image_task(content_key, 0, prompts[0], content_type)
         if not anchor_image_path:
             return {"error": "기준 이미지 생성 실패"}
@@ -302,5 +308,177 @@ async def final_save_node(state: ArticleState):
     
     db.commit()
     
-    logging.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
+    logger.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
+    return state
+
+
+async def select_hot_articles_node(state: TodayNewsnackState):
+    """대상 기사 선정 노드"""
+    db: Session = state["db_session"]
+    selected_articles = []
+    selected_issue_ids = set()
+
+    # 최근 이슈 중에서 화제성 판단
+    time_limit = datetime.now() - timedelta(hours=24)
+    
+    hot_issues = (
+        db.query(Issue.id)
+        .join(RawArticle, Issue.id == RawArticle.issue_id)
+        .filter(Issue.is_processed == True)
+        .filter(Issue.batch_time >= time_limit)
+        .group_by(Issue.id)
+        .order_by(func.count(RawArticle.id).desc())
+        .limit(5)
+        .all()
+    )
+
+    # 선정된 이슈의 AI 기사 가져오기
+    for (issue_id,) in hot_issues:
+        article = db.query(AiArticle).filter(AiArticle.issue_id == issue_id).first()
+        if article:
+            selected_articles.append(article)
+            selected_issue_ids.add(issue_id)
+
+    # 5개 미만이면, 최신 생성된 AI 기사로 채움
+    if len(selected_articles) < 5:
+        remaining = 5 - len(selected_articles)
+        
+        fallback_query = db.query(AiArticle).order_by(AiArticle.published_at.desc())
+        
+        if selected_issue_ids:
+            fallback_query = fallback_query.filter(AiArticle.issue_id.notin_(selected_issue_ids))
+            
+        fallbacks = fallback_query.limit(remaining).all()
+        selected_articles.extend(fallbacks)
+    
+    logger.info(f"[TodayNewsnack] Selected {len(selected_articles)} articles for briefing.")
+
+    return {"selected_articles": [
+        {
+            "id": a.id,
+            "title": a.title,
+            "body": a.body,
+            "thumbnail_url": a.thumbnail_url
+        } for a in selected_articles
+    ]}
+
+
+async def assemble_briefing_node(state: TodayNewsnackState):
+    """구조화된 대본 생성 노드"""
+    articles = state["selected_articles"]
+    
+    # 아나운서 페르소나 주입 프롬프트
+    prompt = f"""
+    당신은 '뉴스낵(newsnack)'의 메인 마스코트인 '박수박사수달'입니다. 
+    아래 제공된 {len(articles)}개의 뉴스 기사 순서대로 브리핑 대본을 작성하세요.
+
+    [아나운서 페르소나 가이드]
+    1. 말투: 20대 후반의 활기차고 지적인 친구 같은 느낌. (~해요, ~네요 문체 사용)
+    2. 성격: 뉴스를 전하는 게 너무 즐거운 에너지 넘치는 수달.
+    3. 특징: 
+    - 오프닝: "안녕하세요! 오늘의 뉴스낵을 시작할게요."처럼 밝게 시작.
+    - 클로징: "오늘 소식은 여기까지예요. 오늘도 즐거운 하루 보내세요!" 등 인사.
+    - 각 기사 대본 사이에 자연스러운 연결 멘트(브릿지)를 포함할 것.
+
+    [제약 사항]
+    1. 반드시 입력된 기사 순서와 동일하게 {len(articles)}개의 대본 세그먼트를 생성할 것.
+    2. 각 기사당 150-200자 내외(30초)의 분량으로 작성할 것.
+    3. 각 기사의 핵심 정보는 반드시 포함하되, 에디터의 개별 말투는 지우고 '박수박사수달'의 톤으로 재창조할 것.
+    4. 전문 용어는 최대한 쉽게 풀어서 설명할 것.
+
+    [뉴스 데이터]
+    {articles}
+    """
+    
+    response = await briefing_llm.ainvoke(prompt)
+    
+    # 기사 정보와 대본 매핑
+    segments = []
+    for original_article, generated_segment in zip(articles, response.segments):
+        segments.append({
+            "article_id": original_article["id"],
+            "title": original_article["title"],
+            "thumbnail_url": original_article["thumbnail_url"],
+            "script": generated_segment.script
+        })
+    
+    # 개수가 불일치한 경우
+    if len(articles) != len(response.segments):
+        logger.warning(
+            f"[AssembleBriefing] Count mismatch! Input: {len(articles)}, Output: {len(response.segments)}."
+        )
+    
+    return {"briefing_segments": segments}
+
+
+async def generate_openai_audio_task(full_script: str):
+    """OpenAI 전용 오디오 생성 태스크"""
+    client = ai_factory.get_audio_client()
+    
+    async with client.audio.speech.with_streaming_response.create(
+        model=settings.OPENAI_TTS_MODEL,
+        voice=settings.OPENAI_TTS_VOICE,
+        input=full_script,
+        instructions=settings.OPENAI_TTS_INSTRUCTIONS
+    ) as response:
+        # 전체 오디오 바이너리를 메모리로 읽어옴
+        audio_bytes = await response.read()
+    
+    return audio_bytes
+
+
+async def generate_audio_node(state: TodayNewsnackState):
+    """단일 오디오 생성 및 타임라인 계산 노드"""
+    segments = state["briefing_segments"]
+    # 5개 기사 대본을 하나로 합침
+    full_script = " ".join([s["script"] for s in segments])
+    
+    if settings.AI_PROVIDER == "openai":
+        audio_bytes = await generate_openai_audio_task(full_script)
+    else:
+        # TODO: 추후 Google TTS 태스크 구현
+        raise NotImplementedError("Google TTS is not implemented yet.")
+    
+    # 오디오 길이 측정 및 타임라인 계산
+    duration = get_audio_duration_from_bytes(audio_bytes)
+    briefing_articles_data = calculate_article_timelines(segments, duration)
+    
+    return {
+        "total_audio_bytes": audio_bytes,
+        "briefing_articles_data": briefing_articles_data
+    }
+
+
+def save_local_audio(audio_bytes: bytes) -> str:
+    """오디오 로컬 저장 공통 유틸"""
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    file_name = f"{uuid.uuid4().hex}.mp3" 
+    file_path = os.path.join(output_dir, file_name)
+
+    with open(file_path, "wb") as f:
+        f.write(audio_bytes)
+    return file_path
+
+
+async def save_today_newsnack_node(state: TodayNewsnackState):
+    """생성된 오디오 및 타임라인 저장 노드"""
+    db: Session = state["db_session"]
+    audio_bytes = state["total_audio_bytes"]
+    articles_data = state["briefing_articles_data"]
+    
+    # 생성된 오디오 저장
+    # TODO: S3 업로드 로직으로 변경
+    file_path = save_local_audio(audio_bytes)
+    
+    # DB 저장
+    new_snack = TodayNewsnack(
+        audio_url=file_path,
+        briefing_articles=articles_data
+    )
+    
+    db.add(new_snack)
+    db.commit()
+    
+    logger.info(f"[TodayNewsnack] Saved to DB. ID: {new_snack.id}, Path: {file_path}")
     return state
