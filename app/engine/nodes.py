@@ -313,38 +313,52 @@ async def final_save_node(state: ArticleState):
 async def select_hot_articles_node(state: TodayNewsnackState):
     """대상 기사 선정 노드"""
     db: Session = state["db_session"]
+    selected_articles = []
+    selected_issue_ids = set()
+
+    # 최근 이슈 중에서 화제성 판단
+    time_limit = datetime.now() - timedelta(hours=24)
     
-    # 1. 최근 기사 중에서 화제성 판단
-    time_limit = datetime.now() - timedelta(days=1)
-    
-    # 2. 연관 기사 수 계산
-    hot_articles_query = (
-        db.query(
-            AiArticle,
-            func.count(RawArticle.id).label("raw_article_count")
-        )
-        .join(RawArticle, AiArticle.issue_id == RawArticle.issue_id)
-        .filter(AiArticle.published_at >= time_limit)
-        .group_by(AiArticle.id)
-        .order_by(func.count(RawArticle.id).desc()) # 연관 기사 많은 순
+    hot_issues = (
+        db.query(Issue.id)
+        .join(RawArticle, Issue.id == RawArticle.issue_id)
+        .filter(Issue.is_processed == True)
+        .filter(Issue.batch_time >= time_limit)
+        .group_by(Issue.id)
+        .order_by(func.count(RawArticle.id).desc())
         .limit(5)
         .all()
     )
 
-    # TODO: 기간 내 선정된 기사가 5개 미만일 경우 예외 처리 필요
+    # 선정된 이슈의 AI 기사 가져오기
+    for (issue_id,) in hot_issues:
+        article = db.query(AiArticle).filter(AiArticle.issue_id == issue_id).first()
+        if article:
+            selected_articles.append(article)
+            selected_issue_ids.add(issue_id)
 
-    selected = [
+    # 5개 미만이면, 최신 생성된 AI 기사로 채움
+    if len(selected_articles) < 5:
+        remaining = 5 - len(selected_articles)
+        
+        fallback_query = db.query(AiArticle).order_by(AiArticle.published_at.desc())
+        
+        if selected_issue_ids:
+            fallback_query = fallback_query.filter(AiArticle.issue_id.notin_(selected_issue_ids))
+            
+        fallbacks = fallback_query.limit(remaining).all()
+        selected_articles.extend(fallbacks)
+    
+    logger.info(f"[TodayNewsnack] Selected {len(selected_articles)} articles for briefing.")
+
+    return {"selected_articles": [
         {
-            "id": item[0].id,
-            "title": item[0].title,
-            "body": item[0].body,
-            "thumbnail_url": item[0].thumbnail_url
-        } for item in hot_articles_query
-    ]
-    
-    logging.info(f"[TodayNewsnack] Selected {len(selected)} hot articles based on raw article count.")
-    
-    return {"selected_articles": selected}
+            "id": a.id,
+            "title": a.title,
+            "body": a.body,
+            "thumbnail_url": a.thumbnail_url
+        } for a in selected_articles
+    ]}
 
 
 async def assemble_briefing_node(state: TodayNewsnackState):
