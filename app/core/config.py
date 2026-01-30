@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     OPENAI_CHAT_MODEL: str = "gpt-5-nano"
     GOOGLE_IMAGE_MODEL: str = "gemini-3-pro-image-preview"
     OPENAI_IMAGE_MODEL: str = "gpt-image-1.5"
-    
+    OPENAI_TTS_MODEL: str = "gpt-4o-mini-tts"
+    OPENAI_TTS_VOICE: str = "marin"
+    OPENAI_TTS_INSTRUCTIONS: str = "뉴스 전문 아나운서처럼 신뢰감 있고 명확한 톤으로 발음해줘. 문장 사이의 호흡을 적절히 유지해줘."
+
     # API Keys
     GOOGLE_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
