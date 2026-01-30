@@ -6,7 +6,8 @@ router = APIRouter(tags=["Content Generation"])
 
 @router.post("/ai-article",
             summary="AI 기사 생성",
-            description="특정 이슈 ID에 해당하는 콘텐츠를 생성하는 백그라운드 작업을 시작합니다.",            response_model=GenerationStatusResponse,
+            description="특정 이슈 ID에 해당하는 콘텐츠를 생성하는 백그라운드 작업을 시작합니다.",
+            response_model=GenerationStatusResponse,
             status_code=status.HTTP_202_ACCEPTED)
 async def create_ai_article(
     background_tasks: BackgroundTasks,
