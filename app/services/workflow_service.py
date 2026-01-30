@@ -6,6 +6,8 @@ from app.engine.graph import create_ai_article_graph, create_today_newsnack_grap
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category
 
+logger = logging.getLogger(__name__)
+
 class WorkflowService:
     def __init__(self):
         self.graph = create_ai_article_graph()
@@ -21,12 +23,12 @@ class WorkflowService:
             issue = db.query(Issue).filter(Issue.id == issue_id).first()
             
             if not issue:
-                logging.error(f"Issue ID {issue_id} not found.")
+                logger.error(f"Issue ID {issue_id} not found.")
                 return
 
             raw_articles = issue.articles
             if not raw_articles:
-                logging.error(f"No articles found for Issue ID {issue_id}")
+                logger.error(f"No articles found for Issue ID {issue_id}")
                 return
 
             # 2. 본문 통합 (프롬프트 입력용)
@@ -55,15 +57,15 @@ class WorkflowService:
                 "image_urls": []
             }
 
-            logging.info(f"[Workflow] Starting pipeline for Issue {issue_id}")
+            logger.info(f"[Workflow] Starting pipeline for Issue {issue_id}")
             
             # LangGraph 실행
             await self.graph.ainvoke(initial_state) 
             
-            logging.info(f"[Workflow] Finished for Issue {issue_id}")
+            logger.info(f"[Workflow] Finished for Issue {issue_id}")
 
         except Exception as e:
-            logging.error(f"[Workflow] Error: {e}", exc_info=True)
+            logger.error(f"[Workflow] Error: {e}", exc_info=True)
         finally:
             db.close()
 
@@ -80,12 +82,12 @@ class WorkflowService:
                 "briefing_articles_data": []
             }
             
-            logging.info("[Workflow] Starting Today's Newsnack Pipeline")
+            logger.info("[Workflow] Starting Today's Newsnack Pipeline")
             await self.newsnack_graph.ainvoke(initial_state)
-            logging.info("[Workflow] Today's Newsnack Pipeline Completed")
+            logger.info("[Workflow] Today's Newsnack Pipeline Completed")
             
         except Exception as e:
-            logging.error(f"[Workflow] Error in Newsnack Pipeline: {e}", exc_info=True)
+            logger.error(f"[Workflow] Error in Newsnack Pipeline: {e}", exc_info=True)
         finally:
             db.close()
 

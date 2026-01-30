@@ -18,6 +18,8 @@ from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
 from app.utils.audio import get_audio_duration_from_bytes, calculate_article_timelines
 
+logger = logging.getLogger(__name__)
+
 # 스타일 래퍼 정의
 WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
 CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. Maintain exact same color palette and layout style. "
@@ -50,10 +52,10 @@ async def select_editor_node(state: ArticleState):
 
     # DB에 에디터가 단 하나도 없는 경우 처리
     if not matched_editor:
-        logging.error("Critical Error: No editors found in the database.")
+        logger.error("Critical Error: No editors found in the database.")
         raise ValueError("에디터 데이터가 DB에 존재하지 않습니다.")
 
-    logging.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
+    logger.info(f"Editor Assigned: {matched_editor.name} for Category {category_name}")
 
     # 3. 객체를 Dict로 변환
     return {
@@ -180,7 +182,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
             model=settings.OPENAI_IMAGE_MODEL,
             prompt=final_prompt,
             n=1,
-            quality="medium", #TODO: 추후 결과물 품질에 따라 조정
+            quality="low", #TODO: 추후 결과물 품질에 따라 조정
             size="1024x1024"
         )
         
@@ -192,7 +194,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         return save_local_image(content_key, idx, img)
         
     except Exception as e:
-        logging.error(f"Error generating OpenAI image {idx}: {e}")
+        logger.error(f"Error generating OpenAI image {idx}: {e}")
         return None
 
 
@@ -230,7 +232,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         if img:
             return save_local_image(content_key, idx, img)
     except Exception as e:
-        logging.error(f"Error generating image {idx}: {e}")
+        logger.error(f"Error generating image {idx}: {e}")
     return None
 
 
@@ -242,7 +244,7 @@ async def image_gen_node(state: ArticleState):
 
     if settings.AI_PROVIDER == "openai":
         # OpenAI 전략: 참조 없이 4장 전면 병렬 생성
-        logging.info(f"[ImageGen] Using OpenAI Strategy for {content_key}")
+        logger.info(f"[ImageGen] Using OpenAI for {content_key}")
         tasks = [
             generate_openai_image_task(content_key, i, prompts[i], content_type)
             for i in range(4)
@@ -251,7 +253,7 @@ async def image_gen_node(state: ArticleState):
         all_paths = [p for p in image_paths if p]
     else:
         # Google 전략: 1장 생성 후 3장 참조 병렬 생성
-        logging.info(f"[ImageGen] Using Gemini Hybrid Strategy for {content_key}")
+        logger.info(f"[ImageGen] Using Gemini for {content_key}")
         anchor_image_path = await generate_google_image_task(content_key, 0, prompts[0], content_type)
         if not anchor_image_path:
             return {"error": "기준 이미지 생성 실패"}
@@ -306,7 +308,7 @@ async def final_save_node(state: ArticleState):
     
     db.commit()
     
-    logging.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
+    logger.info(f"DB Saved: AiArticle ID {new_article.id}, Issue {issue_id} updated to processed.")
     return state
 
 
@@ -443,9 +445,11 @@ async def generate_audio_node(state: TodayNewsnackState):
 
 def save_local_audio(audio_bytes: bytes) -> str:
     """오디오 로컬 저장 공통 유틸"""
-    folder_path = os.makedirs("output", exist_ok=True)
-    content_key = str(uuid.uuid4())
-    file_path = os.path.join(folder_path, f"{content_key}.mp3")
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    file_name = f"{uuid.uuid4().hex}.mp3" 
+    file_path = os.path.join(output_dir, file_name)
+
     with open(file_path, "wb") as f:
         f.write(audio_bytes)
     return file_path
@@ -471,5 +475,5 @@ async def save_today_newsnack_node(state: TodayNewsnackState):
     db.add(new_snack)
     db.commit()
     
-    logging.info(f"[TodayNewsnack] Saved to DB. ID: {new_snack.id}, Path: {file_path}")
+    logger.info(f"[TodayNewsnack] Saved to DB. ID: {new_snack.id}, Path: {file_path}")
     return state
