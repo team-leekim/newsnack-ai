@@ -46,7 +46,7 @@ class RawArticle(Base):
 class Issue(Base):
     __tablename__ = "issue"
     id = Column(BigInteger, primary_key=True)
-    issue_title = Column(String(255))
+    title = Column(String(255))
     category_id = Column(Integer, ForeignKey("category.id"))
     batch_time = Column(DateTime(timezone=True), nullable=False)
     is_processed = Column(Boolean, default=False)

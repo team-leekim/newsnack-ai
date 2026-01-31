@@ -45,7 +45,7 @@ class WorkflowService:
                 "issue_id": issue.id,
                 "category_name": issue.category.name if issue.category else "General",
                 "raw_article_context": merged_content,
-                "raw_article_title": issue.issue_title,
+                "raw_article_title": issue.title,
                 "content_key": generated_content_key,
                 # 결과값 초기화
                 "editor": None,
