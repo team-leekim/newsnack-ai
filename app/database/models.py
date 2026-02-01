@@ -75,14 +75,15 @@ class AiArticle(Base):
 class ReactionCount(Base):
     __tablename__ = "reaction_count"
     article_id = Column(BigInteger, ForeignKey("ai_article.id"), primary_key=True)
+    total_count = Column(Integer, default=0)
     happy_count = Column(Integer, default=0)
     surprised_count = Column(Integer, default=0)
     sad_count = Column(Integer, default=0)
     angry_count = Column(Integer, default=0)
     empathy_count = Column(Integer, default=0)
 
-    created_at = Column(DateTime(timezone=True))
-    updated_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class TodayNewsnack(Base):
     __tablename__ = "today_newsnack"
