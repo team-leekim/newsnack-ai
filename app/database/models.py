@@ -25,6 +25,9 @@ class Editor(Base):
     keywords = Column(JSONB)
     persona_prompt = Column(Text)
 
+    created_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True))
+
     # N:M 관계
     categories = relationship("Category", secondary="editor_category", backref="editors")
 
@@ -77,6 +80,9 @@ class ReactionCount(Base):
     sad_count = Column(Integer, default=0)
     angry_count = Column(Integer, default=0)
     empathy_count = Column(Integer, default=0)
+
+    created_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True))
 
 class TodayNewsnack(Base):
     __tablename__ = "today_newsnack"
