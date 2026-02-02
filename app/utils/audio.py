@@ -1,6 +1,10 @@
 import io
 from pydub import AudioSegment
 
+def convert_pcm_to_mp3(pcm_data: bytes, frame_rate: int = 24000) -> bytes:
+    audio = AudioSegment(data=pcm_data, sample_width=2, frame_rate=frame_rate, channels=1)
+    return audio.export(format="mp3").read()
+
 def get_audio_duration_from_bytes(audio_bytes: bytes, format="mp3") -> float:
     """바이너리 데이터로부터 오디오의 실제 길이를 초 단위로 측정"""
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=format)
