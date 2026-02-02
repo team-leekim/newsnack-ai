@@ -4,7 +4,7 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from app.core.config import settings
 
-class AIProviderFactory:
+class AiProviderFactory:
 
     def __init__(self):
         self._google_client = None
@@ -49,5 +49,5 @@ class AIProviderFactory:
         else:
             return self._get_google_client()
 
-# 인스턴스 하나로 공유
-ai_factory = AIProviderFactory()
+# 전역 인스턴스 생성
+ai_factory = AiProviderFactory()
