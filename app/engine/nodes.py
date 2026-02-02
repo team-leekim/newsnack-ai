@@ -1,5 +1,4 @@
 import os
-import uuid
 import asyncio
 import logging
 import base64
@@ -15,7 +14,8 @@ from .providers import ai_factory
 from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines
+from app.utils.image import save_local_image
+from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, save_local_audio
 
 logger = logging.getLogger(__name__)
 
@@ -159,15 +159,6 @@ async def card_news_creator_node(state: ArticleState):
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
-
-
-def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
-    """이미지 로컬 저장 공통 유틸"""
-    folder_path = os.path.join("output", content_key)
-    os.makedirs(folder_path, exist_ok=True)
-    file_path = os.path.join(folder_path, f"{idx}.png")
-    img.save(file_path)
-    return file_path
 
 
 async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
@@ -471,18 +462,6 @@ async def generate_audio_node(state: TodayNewsnackState):
         "total_audio_bytes": audio_bytes,
         "briefing_articles_data": briefing_articles_data
     }
-
-
-def save_local_audio(audio_bytes: bytes) -> str:
-    """오디오 로컬 저장 공통 유틸"""
-    output_dir = "output"
-    os.makedirs(output_dir, exist_ok=True)
-    file_name = f"{uuid.uuid4().hex}.mp3" 
-    file_path = os.path.join(output_dir, file_name)
-
-    with open(file_path, "wb") as f:
-        f.write(audio_bytes)
-    return file_path
 
 
 async def save_today_newsnack_node(state: TodayNewsnackState):

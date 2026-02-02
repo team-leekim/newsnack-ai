@@ -1,4 +1,6 @@
 import io
+import os
+import uuid
 from pydub import AudioSegment
 
 def convert_pcm_to_mp3(pcm_data: bytes, frame_rate: int = 24000) -> bytes:
@@ -44,3 +46,14 @@ def calculate_article_timelines(briefing_segments: list, total_duration: float):
         current_time += duration
         
     return final_briefing_articles
+
+def save_local_audio(audio_bytes: bytes) -> str:
+    """오디오 로컬 저장 공통 유틸"""
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    file_name = f"{uuid.uuid4().hex}.mp3" 
+    file_path = os.path.join(output_dir, file_name)
+
+    with open(file_path, "wb") as f:
+        f.write(audio_bytes)
+    return file_path
