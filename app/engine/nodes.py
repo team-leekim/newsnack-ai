@@ -406,7 +406,7 @@ async def generate_google_audio_task(full_script: str):
     client = ai_factory.get_audio_client()
     prompt = f"{settings.TTS_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{full_script}"
     
-    response = client.models.generate_content(
+    response = await client.aio.models.generate_content(
         model=settings.GOOGLE_TTS_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
