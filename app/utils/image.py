@@ -4,7 +4,7 @@ import shutil
 from PIL import Image
 from typing import Optional
 
-from .s3 import upload_bytes_to_s3
+from .s3 import s3_manager
 
 def save_image_to_local(content_key: str, idx: int, img: Image.Image) -> str:
     """이미지 로컬 저장 공통 유틸"""
@@ -21,11 +21,11 @@ def _image_to_png_bytes(img: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-def save_image_to_s3(content_key: str, idx: int, img: Image.Image) -> Optional[str]:
+async def upload_image_to_s3(content_key: str, idx: int, img: Image.Image) -> Optional[str]:
     """이미지를 S3에 바로 업로드"""
     s3_key = f"images/{content_key}/{idx}.png"
     png_bytes = _image_to_png_bytes(img)
-    return upload_bytes_to_s3(s3_key, png_bytes, content_type="image/png")
+    return await s3_manager.upload_bytes(s3_key, png_bytes, content_type="image/png")
 
 
 def cleanup_local_reference_image_directory(content_key: str):

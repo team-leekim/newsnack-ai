@@ -14,7 +14,7 @@ from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.image import save_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
+from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         img_data = base64.b64decode(b64_data)
         img = Image.open(BytesIO(img_data))
         
-        s3_url = save_image_to_s3(content_key, idx, img)
+        s3_url = await upload_image_to_s3(content_key, idx, img)
         return s3_url
         
     except Exception as e:
@@ -222,8 +222,8 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
-            s3_url = save_image_to_s3(content_key, idx, img)
             local_path = save_image_to_local(content_key, idx, img) if idx == 0 else None
+            s3_url = await upload_image_to_s3(content_key, idx, img)
             return {"local_path": local_path, "s3_url": s3_url}
     except Exception as e:
         logger.error(f"Error generating image {idx}: {e}")
@@ -246,7 +246,7 @@ async def image_gen_node(state: AiArticleState):
         image_urls = await asyncio.gather(*tasks)
         all_paths = [u for u in image_urls if u]
     else:
-        # Google 전략: 1장 생성 후 3장 참조 병렬 생성
+        # Google 전략: 1장 생성 후 3장 참조 병렬 생성 (Gemini Pro 모델 한정)
         logger.info(f"[ImageGen] Using Gemini for {content_key}")
         anchor_image = await generate_google_image_task(content_key, 0, prompts[0], content_type)
         if not anchor_image or not anchor_image.get("local_path") or not anchor_image.get("s3_url"):
@@ -476,8 +476,7 @@ async def save_today_newsnack_node(state: TodayNewsnackState):
     articles_data = state["briefing_articles_data"]
     
     # 생성된 오디오 저장
-    # TODO: S3 업로드 로직으로 변경
-    file_path = upload_audio_to_s3(audio_bytes)
+    file_path = await upload_audio_to_s3(audio_bytes)
     if not file_path:
         logger.error("[TodayNewsnack] Audio upload failed.")
         raise ValueError("오디오 업로드에 실패했습니다.")
