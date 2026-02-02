@@ -14,8 +14,8 @@ from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.image import save_local_image
-from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, save_local_audio
+from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
+from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,8 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         img_data = base64.b64decode(b64_data)
         img = Image.open(BytesIO(img_data))
         
-        return save_local_image(content_key, idx, img)
+        s3_url = await upload_image_to_s3(content_key, idx, img)
+        return s3_url
         
     except Exception as e:
         logger.error(f"Error generating OpenAI image {idx}: {e}")
@@ -218,16 +219,19 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
                 )
             )
         )
-        img = next((part.as_image() for part in response.parts if part.inline_data), None)
-        if img:
-            return save_local_image(content_key, idx, img)
+        img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
+        if img_part:
+            img = Image.open(BytesIO(img_part.data))
+            local_path = save_image_to_local(content_key, idx, img) if idx == 0 else None
+            s3_url = await upload_image_to_s3(content_key, idx, img)
+            return {"local_path": local_path, "s3_url": s3_url}
     except Exception as e:
         logger.error(f"Error generating image {idx}: {e}")
     return None
 
 
 async def image_gen_node(state: AiArticleState):
-    """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
+    """이미지 병렬 생성"""
     content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
@@ -239,27 +243,29 @@ async def image_gen_node(state: AiArticleState):
             generate_openai_image_task(content_key, i, prompts[i], content_type)
             for i in range(4)
         ]
-        image_paths = await asyncio.gather(*tasks)
-        all_paths = [p for p in image_paths if p]
+        image_urls = await asyncio.gather(*tasks)
+        all_paths = [u for u in image_urls if u]
     else:
-        # Google 전략: 1장 생성 후 3장 참조 병렬 생성
+        # Google 전략: 1장 생성 후 3장 참조 병렬 생성 (Gemini Pro 모델 한정)
         logger.info(f"[ImageGen] Using Gemini for {content_key}")
-        anchor_image_path = await generate_google_image_task(content_key, 0, prompts[0], content_type)
-        if not anchor_image_path:
+        anchor_image = await generate_google_image_task(content_key, 0, prompts[0], content_type)
+        if not anchor_image or not anchor_image.get("local_path") or not anchor_image.get("s3_url"):
             return {"error": "기준 이미지 생성 실패"}
 
         tasks = [
-            generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image_path)
+            generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image["local_path"])
             for i in range(1, 4)
         ]
         parallel_paths = await asyncio.gather(*tasks)
-        all_paths = [anchor_image_path] + [p for p in parallel_paths if p]
+        all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
+        cleanup_local_reference_image_directory(content_key)
 
     return {"image_urls": all_paths}
 
 
 async def save_ai_article_node(state: AiArticleState):
     """최종 결과물 DB 저장"""
+    # TODO: 이미지 생성에 실패한 경우 예외 처리 필요
     db: Session = state['db_session']
     issue_id = state['issue_id']
     
@@ -272,7 +278,7 @@ async def save_ai_article_node(state: AiArticleState):
             for a in issue.articles[:3]
         ]
 
-    # 2. ai_article 테이블 저장 (통합형)
+    # 2. ai_article 테이블 저장
     new_article = AiArticle(
         issue_id=issue_id,
         content_type=state["content_type"],
@@ -466,13 +472,16 @@ async def generate_audio_node(state: TodayNewsnackState):
 
 async def save_today_newsnack_node(state: TodayNewsnackState):
     """생성된 오디오 및 타임라인 저장 노드"""
+    # TODO: 오디오 생성에 실패한 경우 예외 처리 필요
     db: Session = state["db_session"]
     audio_bytes = state["total_audio_bytes"]
     articles_data = state["briefing_articles_data"]
     
     # 생성된 오디오 저장
-    # TODO: S3 업로드 로직으로 변경
-    file_path = save_local_audio(audio_bytes)
+    file_path = await upload_audio_to_s3(audio_bytes)
+    if not file_path:
+        logger.error("[TodayNewsnack] Audio upload failed.")
+        raise ValueError("오디오 업로드에 실패했습니다.")
     
     # DB 저장
     new_snack = TodayNewsnack(

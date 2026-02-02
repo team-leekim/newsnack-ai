@@ -1,16 +1,24 @@
 import io
+import logging
 import os
 import uuid
+from typing import Optional
 from pydub import AudioSegment
+
+from .s3 import s3_manager
+
+logger = logging.getLogger(__name__)
 
 def convert_pcm_to_mp3(pcm_data: bytes, frame_rate: int = 24000) -> bytes:
     audio = AudioSegment(data=pcm_data, sample_width=2, frame_rate=frame_rate, channels=1)
     return audio.export(format="mp3").read()
 
+
 def get_audio_duration_from_bytes(audio_bytes: bytes, format="mp3") -> float:
     """바이너리 데이터로부터 오디오의 실제 길이를 초 단위로 측정"""
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=format)
     return len(audio) / 1000.0
+
 
 def calculate_article_timelines(briefing_segments: list, total_duration: float):
     """
@@ -47,7 +55,8 @@ def calculate_article_timelines(briefing_segments: list, total_duration: float):
         
     return final_briefing_articles
 
-def save_local_audio(audio_bytes: bytes) -> str:
+
+def save_audio_to_local(audio_bytes: bytes) -> str:
     """오디오 로컬 저장 공통 유틸"""
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
@@ -57,3 +66,10 @@ def save_local_audio(audio_bytes: bytes) -> str:
     with open(file_path, "wb") as f:
         f.write(audio_bytes)
     return file_path
+
+
+async def upload_audio_to_s3(audio_bytes: bytes) -> Optional[str]:
+    """오디오 S3 업로드"""
+    file_name = f"{uuid.uuid4().hex}.mp3"
+    s3_key = f"audio/{file_name}"
+    return await s3_manager.upload_bytes(s3_key, audio_bytes, content_type="audio/mpeg")
