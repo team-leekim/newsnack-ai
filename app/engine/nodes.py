@@ -219,8 +219,9 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
                 )
             )
         )
-        img = next((part.as_image() for part in response.parts if part.inline_data), None)
-        if img:
+        img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
+        if img_part:
+            img = Image.open(BytesIO(img_part.data))
             s3_url = save_image_to_s3(content_key, idx, img)
             local_path = save_image_to_local(content_key, idx, img) if idx == 0 else None
             return {"local_path": local_path, "s3_url": s3_url}
