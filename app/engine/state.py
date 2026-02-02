@@ -2,7 +2,7 @@ from typing import TypedDict, List, Optional, Literal, Any
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-class ArticleState(TypedDict):
+class AiArticleState(TypedDict):
     # 시스템 주입
     db_session: Session # SQLAlchemy Session
     

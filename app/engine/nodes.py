@@ -11,7 +11,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from datetime import datetime, timedelta
 
 from .providers import ai_factory
-from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
+from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
 from app.utils.image import save_local_image
@@ -32,7 +32,7 @@ editor_llm = llm.with_structured_output(EditorContentResponse)
 briefing_llm = llm.with_structured_output(BriefingResponse)
 
 
-async def select_editor_node(state: ArticleState):
+async def select_editor_node(state: AiArticleState):
     """DB에서 전문 분야(Category)가 일치하는 에디터 배정"""
     db: Session = state["db_session"]
     category_name = state["category_name"]
@@ -66,7 +66,7 @@ async def select_editor_node(state: ArticleState):
     }
 
 
-async def analyze_node(state: ArticleState):
+async def analyze_article_node(state: AiArticleState):
     """뉴스 분석"""
     context = state['raw_article_context']
     original_title = state['raw_article_title']
@@ -106,7 +106,7 @@ async def analyze_node(state: ArticleState):
     }
 
 
-async def webtoon_creator_node(state: ArticleState):
+async def webtoon_creator_node(state: AiArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     title = state['final_title']
@@ -131,7 +131,7 @@ async def webtoon_creator_node(state: ArticleState):
     }
 
 
-async def card_news_creator_node(state: ArticleState):
+async def card_news_creator_node(state: AiArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     title = state['final_title']
@@ -226,7 +226,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
     return None
 
 
-async def image_gen_node(state: ArticleState):
+async def image_gen_node(state: AiArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
     content_key = state['content_key']
     content_type = state['content_type']
@@ -258,7 +258,7 @@ async def image_gen_node(state: ArticleState):
     return {"image_urls": all_paths}
 
 
-async def final_save_node(state: ArticleState):
+async def save_ai_article_node(state: AiArticleState):
     """최종 결과물 DB 저장"""
     db: Session = state['db_session']
     issue_id = state['issue_id']
