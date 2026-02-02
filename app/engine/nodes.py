@@ -265,6 +265,7 @@ async def image_gen_node(state: AiArticleState):
 
 async def save_ai_article_node(state: AiArticleState):
     """최종 결과물 DB 저장"""
+    # TODO: 이미지 생성에 실패한 경우 예외 처리 필요
     db: Session = state['db_session']
     issue_id = state['issue_id']
     
@@ -277,7 +278,7 @@ async def save_ai_article_node(state: AiArticleState):
             for a in issue.articles[:3]
         ]
 
-    # 2. ai_article 테이블 저장 (통합형)
+    # 2. ai_article 테이블 저장
     new_article = AiArticle(
         issue_id=issue_id,
         content_type=state["content_type"],
@@ -471,6 +472,7 @@ async def generate_audio_node(state: TodayNewsnackState):
 
 async def save_today_newsnack_node(state: TodayNewsnackState):
     """생성된 오디오 및 타임라인 저장 노드"""
+    # TODO: 오디오 생성에 실패한 경우 예외 처리 필요
     db: Session = state["db_session"]
     audio_bytes = state["total_audio_bytes"]
     articles_data = state["briefing_articles_data"]
