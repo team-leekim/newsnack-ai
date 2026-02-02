@@ -1,12 +1,12 @@
 from langgraph.graph import StateGraph, END
-from .state import ArticleState, TodayNewsnackState
+from .state import AiArticleState, TodayNewsnackState
 from .nodes import (
-    analyze_node, 
-    select_editor_node, 
+    analyze_article_node,
+    select_editor_node,
     webtoon_creator_node, 
     card_news_creator_node,
     image_gen_node,
-    final_save_node,
+    save_ai_article_node,
     select_hot_articles_node,
     assemble_briefing_node,
     generate_audio_node,
@@ -14,21 +14,21 @@ from .nodes import (
 )
 
 def create_ai_article_graph():
-    workflow = StateGraph(ArticleState)
+    workflow = StateGraph(AiArticleState)
 
     # 1. 노드 등록
-    workflow.add_node("analyze", analyze_node)
+    workflow.add_node("analyze_article", analyze_article_node)
     workflow.add_node("select_editor", select_editor_node)
     workflow.add_node("webtoon_text", webtoon_creator_node)
     workflow.add_node("card_news_text", card_news_creator_node)
     workflow.add_node("image_gen", image_gen_node)
-    workflow.add_node("final_save", final_save_node)
+    workflow.add_node("save_ai_article", save_ai_article_node)
 
     # 2. 시작점 설정
-    workflow.set_entry_point("analyze")
+    workflow.set_entry_point("analyze_article")
 
     # 3. 에디터 배정
-    workflow.add_edge("analyze", "select_editor")
+    workflow.add_edge("analyze_article", "select_editor")
     
     # 4. 콘텐츠 타입별 프롬프트 생성
     workflow.add_conditional_edges(
@@ -41,8 +41,8 @@ def create_ai_article_graph():
     workflow.add_edge("webtoon_text", "image_gen")
     workflow.add_edge("card_news_text", "image_gen")
     
-    workflow.add_edge("image_gen", "final_save")
-    workflow.add_edge("final_save", END)
+    workflow.add_edge("image_gen", "save_ai_article")
+    workflow.add_edge("save_ai_article", END)
 
     return workflow.compile()
 

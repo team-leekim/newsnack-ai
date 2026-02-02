@@ -1,11 +1,9 @@
 import os
-import uuid
 import asyncio
 import logging
 import base64
 from io import BytesIO
 from PIL import Image
-from google import genai
 from google.genai import types
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
@@ -13,10 +11,11 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from datetime import datetime, timedelta
 
 from .providers import ai_factory
-from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
+from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.audio import get_audio_duration_from_bytes, calculate_article_timelines
+from app.utils.image import save_local_image
+from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, save_local_audio
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ editor_llm = llm.with_structured_output(EditorContentResponse)
 briefing_llm = llm.with_structured_output(BriefingResponse)
 
 
-async def select_editor_node(state: ArticleState):
+async def select_editor_node(state: AiArticleState):
     """DB에서 전문 분야(Category)가 일치하는 에디터 배정"""
     db: Session = state["db_session"]
     category_name = state["category_name"]
@@ -67,7 +66,7 @@ async def select_editor_node(state: ArticleState):
     }
 
 
-async def analyze_node(state: ArticleState):
+async def analyze_article_node(state: AiArticleState):
     """뉴스 분석"""
     context = state['raw_article_context']
     original_title = state['raw_article_title']
@@ -107,7 +106,7 @@ async def analyze_node(state: ArticleState):
     }
 
 
-async def webtoon_creator_node(state: ArticleState):
+async def webtoon_creator_node(state: AiArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     title = state['final_title']
@@ -132,7 +131,7 @@ async def webtoon_creator_node(state: ArticleState):
     }
 
 
-async def card_news_creator_node(state: ArticleState):
+async def card_news_creator_node(state: AiArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     title = state['final_title']
@@ -160,15 +159,6 @@ async def card_news_creator_node(state: ArticleState):
         "final_body": response.final_body,
         "image_prompts": response.image_prompts
     }
-
-
-def save_local_image(content_key: str, idx: int, img: Image.Image) -> str:
-    """이미지 로컬 저장 공통 유틸"""
-    folder_path = os.path.join("output", content_key)
-    os.makedirs(folder_path, exist_ok=True)
-    file_path = os.path.join(folder_path, f"{idx}.png")
-    img.save(file_path)
-    return file_path
 
 
 async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
@@ -236,7 +226,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
     return None
 
 
-async def image_gen_node(state: ArticleState):
+async def image_gen_node(state: AiArticleState):
     """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
     content_key = state['content_key']
     content_type = state['content_type']
@@ -268,7 +258,7 @@ async def image_gen_node(state: ArticleState):
     return {"image_urls": all_paths}
 
 
-async def final_save_node(state: ArticleState):
+async def save_ai_article_node(state: AiArticleState):
     """최종 결과물 DB 저장"""
     db: Session = state['db_session']
     issue_id = state['issue_id']
@@ -411,6 +401,30 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     return {"briefing_segments": segments}
 
 
+async def generate_google_audio_task(full_script: str):
+    """Google Gemini TTS를 사용한 오디오 생성 태스크"""
+    client = ai_factory.get_audio_client()
+    prompt = f"{settings.TTS_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{full_script}"
+    
+    response = await client.aio.models.generate_content(
+        model=settings.GOOGLE_TTS_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=settings.GOOGLE_TTS_VOICE
+                    )
+                )
+            )
+        )
+    )
+
+    raw_pcm = response.candidates[0].content.parts[0].inline_data.data
+    return convert_pcm_to_mp3(raw_pcm)
+
+
 async def generate_openai_audio_task(full_script: str):
     """OpenAI 전용 오디오 생성 태스크"""
     client = ai_factory.get_audio_client()
@@ -419,7 +433,7 @@ async def generate_openai_audio_task(full_script: str):
         model=settings.OPENAI_TTS_MODEL,
         voice=settings.OPENAI_TTS_VOICE,
         input=full_script,
-        instructions=settings.OPENAI_TTS_INSTRUCTIONS
+        instructions=settings.TTS_INSTRUCTIONS
     ) as response:
         # 전체 오디오 바이너리를 메모리로 읽어옴
         audio_bytes = await response.read()
@@ -434,10 +448,11 @@ async def generate_audio_node(state: TodayNewsnackState):
     full_script = " ".join([s["script"] for s in segments])
     
     if settings.AI_PROVIDER == "openai":
+        logger.info("[AudioGen] Using OpenAI TTS")
         audio_bytes = await generate_openai_audio_task(full_script)
     else:
-        # TODO: 추후 Google TTS 태스크 구현
-        raise NotImplementedError("Google TTS is not implemented yet.")
+        logger.info("[AudioGen] Using Google Gemini TTS")
+        audio_bytes = await generate_google_audio_task(full_script)
     
     # 오디오 길이 측정 및 타임라인 계산
     duration = get_audio_duration_from_bytes(audio_bytes)
@@ -447,18 +462,6 @@ async def generate_audio_node(state: TodayNewsnackState):
         "total_audio_bytes": audio_bytes,
         "briefing_articles_data": briefing_articles_data
     }
-
-
-def save_local_audio(audio_bytes: bytes) -> str:
-    """오디오 로컬 저장 공통 유틸"""
-    output_dir = "output"
-    os.makedirs(output_dir, exist_ok=True)
-    file_name = f"{uuid.uuid4().hex}.mp3" 
-    file_path = os.path.join(output_dir, file_name)
-
-    with open(file_path, "wb") as f:
-        f.write(audio_bytes)
-    return file_path
 
 
 async def save_today_newsnack_node(state: TodayNewsnackState):

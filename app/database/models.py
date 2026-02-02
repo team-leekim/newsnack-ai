@@ -20,7 +20,7 @@ class Editor(Base):
     __tablename__ = "editor"
     id = Column(Integer, primary_key=True)
     name = Column(String(50), nullable=False)
-    profile_image_url = Column(Text)
+    image_url = Column(Text)
     description = Column(Text)
     keywords = Column(JSONB)
     persona_prompt = Column(Text)
