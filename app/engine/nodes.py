@@ -14,8 +14,8 @@ from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.image import save_local_image
-from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, save_local_audio
+from app.utils.image import save_image_to_s3, save_image_to_local, cleanup_local_reference_image
+from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 
 logger = logging.getLogger(__name__)
 
@@ -476,7 +476,10 @@ async def save_today_newsnack_node(state: TodayNewsnackState):
     
     # 생성된 오디오 저장
     # TODO: S3 업로드 로직으로 변경
-    file_path = save_local_audio(audio_bytes)
+    file_path = upload_audio_to_s3(audio_bytes)
+    if not file_path:
+        logger.error("[TodayNewsnack] Audio upload failed.")
+        raise ValueError("오디오 업로드에 실패했습니다.")
     
     # DB 저장
     new_snack = TodayNewsnack(
