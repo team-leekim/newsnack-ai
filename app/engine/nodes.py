@@ -231,7 +231,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
 
 
 async def image_gen_node(state: AiArticleState):
-    """[하이브리드 전략] 1번 생성 후 3번 병렬 생성"""
+    """이미지 병렬 생성"""
     content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
@@ -258,7 +258,7 @@ async def image_gen_node(state: AiArticleState):
         ]
         parallel_paths = await asyncio.gather(*tasks)
         all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-        cleanup_local_reference_image_directory(content_key, idx=0)
+        cleanup_local_reference_image_directory(content_key)
 
     return {"image_urls": all_paths}
 

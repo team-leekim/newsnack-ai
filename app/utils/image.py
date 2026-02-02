@@ -28,7 +28,7 @@ def save_image_to_s3(content_key: str, idx: int, img: Image.Image) -> Optional[s
     return upload_bytes_to_s3(s3_key, png_bytes, content_type="image/png")
 
 
-def cleanup_local_reference_image_directory(content_key: str, idx: int = 0):
+def cleanup_local_reference_image_directory(content_key: str):
     """기준 이미지 파일이 위치한 디렉토리 삭제"""
     directory_path = os.path.join("output", content_key)
     if os.path.exists(directory_path):
