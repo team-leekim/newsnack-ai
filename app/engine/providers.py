@@ -43,8 +43,9 @@ class AIProviderFactory:
                 self._openai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             return self._openai_client
         else:
-            # TODO: Google TTS 도입 시 추가
-            return None
+            if not self._google_client:
+                self._google_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+            return self._google_client
 
 # 인스턴스 하나만 생성해서 공유
 ai_factory = AIProviderFactory()
