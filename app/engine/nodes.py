@@ -404,7 +404,7 @@ async def assemble_briefing_node(state: TodayNewsnackState):
 async def generate_google_audio_task(full_script: str):
     """Google Gemini TTS를 사용한 오디오 생성 태스크"""
     client = ai_factory.get_audio_client()
-    prompt = f"{settings.TTS_PERSONA_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{full_script}"
+    prompt = f"{settings.TTS_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{full_script}"
     
     response = client.models.generate_content(
         model=settings.GOOGLE_TTS_MODEL,
