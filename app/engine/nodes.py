@@ -5,7 +5,6 @@ import logging
 import base64
 from io import BytesIO
 from PIL import Image
-from google import genai
 from google.genai import types
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
@@ -16,7 +15,7 @@ from .providers import ai_factory
 from .state import ArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.audio import get_audio_duration_from_bytes, calculate_article_timelines
+from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +410,30 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     return {"briefing_segments": segments}
 
 
+async def generate_google_audio_task(full_script: str):
+    """Google Gemini TTS를 사용한 오디오 생성 태스크"""
+    client = ai_factory.get_audio_client()
+    prompt = f"{settings.TTS_PERSONA_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{full_script}"
+    
+    response = client.models.generate_content(
+        model=settings.GOOGLE_TTS_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=settings.GOOGLE_TTS_VOICE
+                    )
+                )
+            )
+        )
+    )
+
+    raw_pcm = response.candidates[0].content.parts[0].inline_data.data
+    return convert_pcm_to_mp3(raw_pcm)
+
+
 async def generate_openai_audio_task(full_script: str):
     """OpenAI 전용 오디오 생성 태스크"""
     client = ai_factory.get_audio_client()
@@ -419,7 +442,7 @@ async def generate_openai_audio_task(full_script: str):
         model=settings.OPENAI_TTS_MODEL,
         voice=settings.OPENAI_TTS_VOICE,
         input=full_script,
-        instructions=settings.OPENAI_TTS_INSTRUCTIONS
+        instructions=settings.TTS_INSTRUCTIONS
     ) as response:
         # 전체 오디오 바이너리를 메모리로 읽어옴
         audio_bytes = await response.read()
@@ -434,10 +457,11 @@ async def generate_audio_node(state: TodayNewsnackState):
     full_script = " ".join([s["script"] for s in segments])
     
     if settings.AI_PROVIDER == "openai":
+        logger.info("[AudioGen] Using OpenAI TTS")
         audio_bytes = await generate_openai_audio_task(full_script)
     else:
-        # TODO: 추후 Google TTS 태스크 구현
-        raise NotImplementedError("Google TTS is not implemented yet.")
+        logger.info("[AudioGen] Using Google Gemini TTS")
+        audio_bytes = await generate_google_audio_task(full_script)
     
     # 오디오 길이 측정 및 타임라인 계산
     duration = get_audio_duration_from_bytes(audio_bytes)
