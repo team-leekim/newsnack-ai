@@ -1,5 +1,6 @@
 import io
 import os
+import shutil
 from PIL import Image
 from typing import Optional
 
@@ -27,8 +28,8 @@ def save_image_to_s3(content_key: str, idx: int, img: Image.Image) -> Optional[s
     return upload_bytes_to_s3(s3_key, png_bytes, content_type="image/png")
 
 
-def cleanup_local_reference_image(content_key: str, idx: int = 0):
-    """기준 이미지 파일 삭제"""
-    file_path = os.path.join("output", content_key, f"{idx}.png")
-    if os.path.exists(file_path):
-        os.remove(file_path)
+def cleanup_local_reference_image_directory(content_key: str, idx: int = 0):
+    """기준 이미지 파일이 위치한 디렉토리 삭제"""
+    directory_path = os.path.join("output", content_key)
+    if os.path.exists(directory_path):
+        shutil.rmtree(directory_path)

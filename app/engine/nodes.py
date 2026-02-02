@@ -14,7 +14,7 @@ from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.image import save_image_to_s3, save_image_to_local, cleanup_local_reference_image
+from app.utils.image import save_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 
 logger = logging.getLogger(__name__)
@@ -258,7 +258,7 @@ async def image_gen_node(state: AiArticleState):
         ]
         parallel_paths = await asyncio.gather(*tasks)
         all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-        cleanup_local_reference_image(content_key, idx=0)
+        cleanup_local_reference_image_directory(content_key, idx=0)
 
     return {"image_urls": all_paths}
 
