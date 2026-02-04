@@ -2,7 +2,7 @@ name: Newsnack AI - CD
 
 on:
   push:
-    branches: [ main, feature/* ]
+    branches: [ main ]
 
 env:
   AWS_REGION: ap-northeast-2
