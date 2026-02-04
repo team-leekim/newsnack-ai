@@ -207,22 +207,31 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         contents.append(ref_img)
         contents[0] += " Use the reference image ONLY to maintain character/style consistency. IGNORE its composition and pose."
 
+    image_model = (
+        settings.GOOGLE_IMAGE_MODEL_WITH_REFERENCE
+        if settings.GOOGLE_IMAGE_WITH_REFERENCE
+        else settings.GOOGLE_IMAGE_MODEL
+    )
+
+    config_params = {"aspect_ratio": "1:1"}
+    if settings.GOOGLE_IMAGE_WITH_REFERENCE:
+        config_params["image_size"] = "1K"
+    image_config = types.ImageConfig(**config_params)
+
     try:
         response = await client.aio.models.generate_content(
-            model=settings.GOOGLE_IMAGE_MODEL,
+            model=image_model,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=['IMAGE'],
-                image_config=types.ImageConfig(
-                aspect_ratio="1:1",
-                image_size="1K"
-                )
+                image_config=image_config
             )
         )
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
-            local_path = save_image_to_local(content_key, idx, img) if idx == 0 else None
+            # Pro 모델만 0번 이미지를 로컬에 저장
+            local_path = save_image_to_local(content_key, idx, img) if (idx == 0 and settings.GOOGLE_IMAGE_WITH_REFERENCE) else None
             s3_url = await upload_image_to_s3(content_key, idx, img)
             return {"local_path": local_path, "s3_url": s3_url}
     except Exception as e:
@@ -246,19 +255,29 @@ async def image_gen_node(state: AiArticleState):
         image_urls = await asyncio.gather(*tasks)
         all_paths = [u for u in image_urls if u]
     else:
-        # Google 전략: 1장 생성 후 3장 참조 병렬 생성 (Gemini Pro 모델 한정)
-        logger.info(f"[ImageGen] Using Gemini for {content_key}")
-        anchor_image = await generate_google_image_task(content_key, 0, prompts[0], content_type)
-        if not anchor_image or not anchor_image.get("local_path") or not anchor_image.get("s3_url"):
-            return {"error": "기준 이미지 생성 실패"}
+        if settings.GOOGLE_IMAGE_WITH_REFERENCE:
+            # Google 전략: 1장 생성 후 3장 참조 병렬 생성 (Pro 모델)
+            logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
+            anchor_image = await generate_google_image_task(content_key, 0, prompts[0], content_type)
+            if not anchor_image or not anchor_image.get("local_path") or not anchor_image.get("s3_url"):
+                return {"error": "기준 이미지 생성 실패"}
 
-        tasks = [
-            generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image["local_path"])
-            for i in range(1, 4)
-        ]
-        parallel_paths = await asyncio.gather(*tasks)
-        all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-        cleanup_local_reference_image_directory(content_key)
+            tasks = [
+                generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image["local_path"])
+                for i in range(1, 4)
+            ]
+            parallel_paths = await asyncio.gather(*tasks)
+            all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
+            cleanup_local_reference_image_directory(content_key)
+        else:
+            # Google 전략: 참조 없이 4장 전면 병렬 생성 (Flash 모델)
+            logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
+            tasks = [
+                generate_google_image_task(content_key, i, prompts[i], content_type)
+                for i in range(4)
+            ]
+            parallel_paths = await asyncio.gather(*tasks)
+            all_paths = [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
 
     return {"image_urls": all_paths}
 
