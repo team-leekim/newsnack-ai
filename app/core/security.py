@@ -1,3 +1,4 @@
+import secrets
 from fastapi import HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
 from starlette import status
@@ -25,7 +26,7 @@ async def verify_api_key(header_value: str = Security(api_key_header)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="X-API-KEY 헤더가 없습니다."
         )
-    if header_value != settings.API_KEY:
+    if not secrets.compare_digest(header_value, settings.API_KEY):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="API 키가 올바르지 않습니다."
