@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     """
 
     # API Keys
+    API_KEY: str
     GOOGLE_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     
