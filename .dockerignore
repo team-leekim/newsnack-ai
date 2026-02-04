@@ -1,0 +1,14 @@
+# 보안 관련
+.git
+.env
+venv/
+.venv/
+
+# 캐시 관련
+__pycache__/
+*.pyc
+
+# 도커 관련
+Dockerfile
+docker-compose.yml
+.dockerignore
