@@ -232,7 +232,8 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
-            local_path = save_image_to_local(content_key, idx, img) if idx == 0 else None
+            # Pro 모델에서만 0번 이미지를 로컬에 저장 (참조용)
+            local_path = save_image_to_local(content_key, idx, img) if (idx == 0 and settings.GOOGLE_IMAGE_WITH_REFERENCE) else None
             s3_url = await upload_image_to_s3(content_key, idx, img)
             return {"local_path": local_path, "s3_url": s3_url}
     except Exception as e:
