@@ -12,4 +12,4 @@ app.include_router(contents.router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "up"}
+    return {"status": "UP"}
