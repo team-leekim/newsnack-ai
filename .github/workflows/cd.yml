@@ -1,0 +1,115 @@
+name: Newsnack AI - CD
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: newsnack-ai
+  CONTAINER_NAME: newsnack-ai
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.build-image.outputs.image_uri }}
+      registry: ${{ steps.login-ecr.outputs.registry }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --push \
+            --cache-from type=registry,ref=$ECR_REGISTRY/$ECR_REPOSITORY:buildcache \
+            --cache-to type=registry,ref=$ECR_REGISTRY/$ECR_REPOSITORY:buildcache,mode=max \
+            .
+          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+    steps:
+      - name: Deploy to EC2 via SSH
+        env:
+          IMAGE_URI: ${{ needs.build-and-push.outputs.image_uri }}
+          ECR_REGISTRY: ${{ needs.build-and-push.outputs.registry }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: IMAGE_URI, ECR_REGISTRY, CONTAINER_NAME, AWS_REGION
+          script: |
+            # 1. ECR 로그인
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+            # 2. 최신 이미지 pull
+            docker pull $IMAGE_URI
+
+            # 3. 기존 컨테이너 중지 및 제거
+            if [ "$(docker ps -a -q --filter name=^/${CONTAINER_NAME}$)" ]; then
+              docker stop $CONTAINER_NAME
+              docker rm $CONTAINER_NAME
+            fi
+
+            # 4. 새 컨테이너 실행
+            docker run -d --name $CONTAINER_NAME \
+              -p 8000:8000 \
+              --restart always \
+              -e AI_PROVIDER="${{ secrets.AI_PROVIDER }}" \
+              -e GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}" \
+              -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              -e GOOGLE_IMAGE_WITH_REFERENCE="${{ secrets.GOOGLE_IMAGE_WITH_REFERENCE }}" \
+              -e DB_URL="${{ secrets.DB_URL }}" \
+              -e AWS_REGION="${{ secrets.AWS_REGION }}" \
+              -e AWS_S3_BUCKET="${{ secrets.AWS_S3_BUCKET }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              $IMAGE_URI
+
+            # 5. 헬스체크
+            echo "Waiting for AI application health check..."
+            sleep 15
+            
+            for i in {1..10}; do
+              RESPONSE=$(curl -s http://localhost:8000/health | grep "UP" || true)
+            
+              if [ -n "$RESPONSE" ]; then
+                echo "🚀 AI Server Health check PASSED!"
+                docker image prune -af
+                exit 0
+              fi
+            
+              echo "Health check failed, retrying... ($i/10)"
+              sleep 5
+            done
+
+            echo "❌ Health check FAILED."
+            docker logs --tail 100 $CONTAINER_NAME
+            exit 1

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     
     # Database & Storage
-    DATABASE_URL: str
+    DB_URL: str
     AWS_REGION: str = "ap-northeast-2"
     AWS_S3_BUCKET: str
     AWS_ACCESS_KEY_ID: str
