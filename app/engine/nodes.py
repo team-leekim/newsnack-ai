@@ -213,12 +213,10 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         else settings.GOOGLE_IMAGE_MODEL
     )
 
-    image_config = types.ImageConfig(
-        aspect_ratio="1:1",
-        image_size="1K"
-    ) if settings.GOOGLE_IMAGE_WITH_REFERENCE else types.ImageConfig(
-        aspect_ratio="1:1"
-    )
+    config_params = {"aspect_ratio": "1:1"}
+    if settings.GOOGLE_IMAGE_WITH_REFERENCE:
+        config_params["image_size"] = "1K"
+    image_config = types.ImageConfig(**config_params)
 
     try:
         response = await client.aio.models.generate_content(
@@ -232,7 +230,7 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
-            # Pro 모델에서만 0번 이미지를 로컬에 저장 (참조용)
+            # Pro 모델만 0번 이미지를 로컬에 저장
             local_path = save_image_to_local(content_key, idx, img) if (idx == 0 and settings.GOOGLE_IMAGE_WITH_REFERENCE) else None
             s3_url = await upload_image_to_s3(content_key, idx, img)
             return {"local_path": local_path, "s3_url": s3_url}
