@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # 1. 필수 패키지 설치
 RUN apt-get update && apt-get install -y \
