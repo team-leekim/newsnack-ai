@@ -1,6 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List
 
 class GenerationStatusResponse(BaseModel):
     status: str
     message: str
+
+class AiArticleBatchGenerationRequest(BaseModel):
+    issue_ids: List[int]
