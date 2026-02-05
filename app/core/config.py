@@ -3,7 +3,6 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # 환경 변수 정의
     PROJECT_NAME: str = "newsnack AI Server"
     
     # AI Provider
@@ -42,6 +41,10 @@ class Settings(BaseSettings):
     AWS_S3_BUCKET: str
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
+
+    # Other Settings
+    AI_ARTICLE_MAX_CONCURRENT_GENERATIONS: int = 2
+    AI_ARTICLE_GENERATION_DELAY_SECONDS: int = 5
 
     @model_validator(mode='after')
     def check_api_keys(self) -> 'Settings':

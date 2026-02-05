@@ -1,10 +1,13 @@
+import asyncio
 import uuid
 import logging
+from typing import List
 from sqlalchemy.orm import Session
-from pathlib import Path
 from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category
+
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +15,23 @@ class WorkflowService:
     def __init__(self):
         self.graph = create_ai_article_graph()
         self.newsnack_graph = create_today_newsnack_graph()
+        self.semaphore = asyncio.Semaphore(settings.AI_ARTICLE_MAX_CONCURRENT_GENERATIONS)
+
+    async def run_batch_ai_articles_pipeline(self, issue_ids: List[int]):
+        """
+        여러 이슈를 배치로 처리하되, 세마포어로 동시 실행 수를 제한함
+        """
+        async def wrapped_pipeline(issue_id: int):
+            # 세마포어 획득
+            async with self.semaphore:
+                await asyncio.sleep(settings.AI_ARTICLE_GENERATION_DELAY_SECONDS)
+
+                logger.info(f"[Batch] Starting issue {issue_id}")
+                await self.run_ai_article_pipeline(issue_id)
+        
+        # 모든 이슈에 대해 작업 생성 후 동시에 실행
+        tasks = [wrapped_pipeline(iid) for iid in issue_ids]
+        await asyncio.gather(*tasks)
 
     async def run_ai_article_pipeline(self, issue_id: int):
         """
@@ -60,7 +80,7 @@ class WorkflowService:
             logger.info(f"[Workflow] Starting pipeline for Issue {issue_id}")
             
             # LangGraph 실행
-            await self.graph.ainvoke(initial_state) 
+            await self.graph.ainvoke(initial_state)
             
             logger.info(f"[Workflow] Finished for Issue {issue_id}")
 
