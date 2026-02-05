@@ -12,6 +12,12 @@ from datetime import datetime, timedelta
 
 from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
+from .prompts import (
+    ARTICLE_ANALYSIS_TEMPLATE,
+    create_webtoon_template,
+    create_card_news_template,
+    create_briefing_template,
+)
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
 from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
@@ -71,33 +77,13 @@ async def analyze_article_node(state: AiArticleState):
     context = state['raw_article_context']
     original_title = state['raw_article_title']
     
-    prompt = f"""
-    당신은 뉴스 큐레이션 전문가입니다. 다음 뉴스를 분석하여 제목을 최적화하고 내용을 요약하세요.
-
-    [작업 가이드라인]
-    1. 제목(title): 
-       - 원본 제목과 본문 내용을 바탕으로 기사의 **핵심 내용을 가장 잘 나타내는 짧고 간결한 제목**을 생성할 것.
-       - **최대 15자 내외**로 작성하여 한눈에 들어오도록 할 것.
-       - 독자의 흥미를 유발하되, **과장 없이 명확한 키워드**를 포함할 것.
-       - 문체를 변경하거나 감정을 섞지 말고, **객관적인 언론사 기사 제목**처럼 작성할 것.
-    2. 요약(summary):
-       - 반드시 3줄로 작성할 것.
-       - 핵심 위주로 아주 짧고 간결하게 작성할 것.
-       - 문장 끝을 '~함', '~임', '~함'과 같은 명사형 어미로 끝낼 것. (예: 삼성전자 실적 발표함, 금리 인상 결정됨)
-    3. 분류(content_type):
-       - 서사성/감정 중심이면 'WEBTOON', 정보/데이터 중심이면 'CARD_NEWS'로 분류할 것.
-
-    [분석 대상]
-    원본 제목: {original_title}
-    본문 내용: {context}
-
-    [출력 요구사항]
-    - title: 최적화된 제목
-    - summary: 명사형 어미를 사용한 3줄 요약
-    - content_type: 분류 결과
-    """
+    # 프롬프트 템플릿에서 메시지 생성
+    formatted_messages = ARTICLE_ANALYSIS_TEMPLATE.format_messages(
+        original_title=original_title,
+        content=context
+    )
     
-    response = await analyze_llm.ainvoke(prompt)
+    response = await analyze_llm.ainvoke(formatted_messages)
 
     return {
         "final_title": response.title,
@@ -112,18 +98,14 @@ async def webtoon_creator_node(state: AiArticleState):
     title = state['final_title']
     context = state['raw_article_context']
     
-    system_msg = SystemMessage(content=f"""
-    {editor['persona_prompt']}
-    너는 지금부터 이 뉴스를 4페이지 분량의 시각적 스토리보드로 재구성해야 해.
+    # 에디터의 페르소나를 포함한 템플릿 생성 및 메시지 포맷
+    template = create_webtoon_template(editor['persona_prompt'])
+    formatted_messages = template.format_messages(
+        title=title,
+        content=context
+    )
     
-    [미션]
-    1. 각 페이지의 'image_prompts'는 서로 다른 시각적 구도와 내용을 담아야 함.
-    2. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
-    3. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
-    """)
-    human_msg = HumanMessage(content=f"제목: {title}\n내용: {context}")
-    
-    response = await editor_llm.ainvoke([system_msg, human_msg])
+    response = await editor_llm.ainvoke(formatted_messages)
     
     return {
         "final_body": response.final_body,
@@ -137,23 +119,14 @@ async def card_news_creator_node(state: AiArticleState):
     title = state['final_title']
     context = state['raw_article_context']
     
-    system_msg = SystemMessage(content=f"""
-    {editor['persona_prompt']}
-    너는 복잡한 뉴스를 한눈에 들어오는 4장의 카드뉴스로 재구성해야 해.
+    # 에디터의 페르소나를 포함한 템플릿 생성 및 메시지 포맷
+    template = create_card_news_template(editor['persona_prompt'])
+    formatted_messages = template.format_messages(
+        title=title,
+        content=context
+    )
     
-    [미션]
-    1. 4개의 'image_prompts'는 뉴스 본문의 핵심 정보를 단계별로 시각화해야 함.
-    2. 각 페이지는 시각적 중복을 피하기 위해 레이아웃을 다르게 구성해:
-       - 1번: 시선을 끄는 강력한 제목과 상징적인 아이콘
-       - 2번: 핵심 수치나 데이터를 강조하는 차트 또는 다이어그램
-       - 3번: 사건의 인과관계를 보여주는 단계별 레이아웃
-       - 4번: 한눈에 들어오는 요약 리스트와 마무리 비주얼
-    3. 모든 설명은 한국어로 작성하되, 'image_prompts' 내의 시각 묘사만 영어로 작성해줘.
-    4. 디자인은 세련된 소셜 미디어 감성(Modern and trendy social media aesthetic)을 유지해.
-    """)
-    human_msg = HumanMessage(content=f"제목: {title}\n내용: {context}")
-    
-    response = await editor_llm.ainvoke([system_msg, human_msg])
+    response = await editor_llm.ainvoke(formatted_messages)
     
     return {
         "final_body": response.final_body,
@@ -382,30 +355,11 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     """구조화된 대본 생성 노드"""
     articles = state["selected_articles"]
     
-    # 아나운서 페르소나 주입 프롬프트
-    prompt = f"""
-    당신은 '뉴스낵(newsnack)'의 메인 마스코트인 '박수박사수달'입니다. 
-    아래 제공된 {len(articles)}개의 뉴스 기사 순서대로 브리핑 대본을 작성하세요.
-
-    [아나운서 페르소나 가이드]
-    1. 말투: 20대 후반의 활기차고 지적인 친구 같은 느낌. (~해요, ~네요 문체 사용)
-    2. 성격: 뉴스를 전하는 게 너무 즐거운 에너지 넘치는 수달.
-    3. 특징: 
-    - 오프닝: "안녕하세요! 오늘의 뉴스낵을 시작할게요."처럼 밝게 시작.
-    - 클로징: "오늘 소식은 여기까지예요. 오늘도 즐거운 하루 보내세요!" 등 인사.
-    - 각 기사 대본 사이에 자연스러운 연결 멘트(브릿지)를 포함할 것.
-
-    [제약 사항]
-    1. 반드시 입력된 기사 순서와 동일하게 {len(articles)}개의 대본 세그먼트를 생성할 것.
-    2. 각 기사당 150-200자 내외(30초)의 분량으로 작성할 것.
-    3. 각 기사의 핵심 정보는 반드시 포함하되, 에디터의 개별 말투는 지우고 '박수박사수달'의 톤으로 재창조할 것.
-    4. 전문 용어는 최대한 쉽게 풀어서 설명할 것.
-
-    [뉴스 데이터]
-    {articles}
-    """
+    # 기사 개수를 반영한 브리핑 템플릿 생성 및 메시지 포맷
+    template = create_briefing_template(len(articles))
+    formatted_messages = template.format_messages(articles=articles)
     
-    response = await briefing_llm.ainvoke(prompt)
+    response = await briefing_llm.ainvoke(formatted_messages)
     
     # 기사 정보와 대본 매핑
     segments = []
