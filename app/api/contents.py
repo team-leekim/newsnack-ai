@@ -1,19 +1,20 @@
-from fastapi import APIRouter, BackgroundTasks, Query, status
-from app.schemas.generation import GenerationStatusResponse
+from fastapi import APIRouter, BackgroundTasks, status
+from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse
 from app.services.workflow_service import workflow_service
 
 router = APIRouter(tags=["Content Generation"])
 
-@router.post("/ai-article",
-            summary="AI 기사 생성",
-            description="특정 이슈 ID에 해당하는 콘텐츠를 생성하는 백그라운드 작업을 시작합니다.",
+@router.post("/ai-articles",
+            summary="AI 기사 일괄 생성",
+            description="여러 이슈 ID에 해당하는 콘텐츠를 배치로 생성합니다.",
             response_model=GenerationStatusResponse,
             status_code=status.HTTP_202_ACCEPTED)
-async def create_ai_article(
+async def create_batch_ai_articles(
+    request: AiArticleBatchGenerationRequest,
     background_tasks: BackgroundTasks,
-    issue_id: int = Query(..., description="생성할 AI 콘텐츠의 이슈 ID")
 ):
-    background_tasks.add_task(workflow_service.run_ai_article_pipeline, issue_id)
+
+    background_tasks.add_task(workflow_service.run_batch_ai_articles_pipeline, request.issue_ids)
 
     return GenerationStatusResponse(
         status="accepted",
