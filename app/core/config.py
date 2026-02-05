@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
 
     # Other Settings
-    MAX_CONCURRENT_AI_ARTICLE_GENERATIONS: int = 2
+    AI_ARTICLE_MAX_CONCURRENT_GENERATIONS: int = 2
+    AI_ARTICLE_GENERATION_DELAY_SECONDS: int = 5
 
     @model_validator(mode='after')
     def check_api_keys(self) -> 'Settings':

@@ -15,7 +15,7 @@ class WorkflowService:
     def __init__(self):
         self.graph = create_ai_article_graph()
         self.newsnack_graph = create_today_newsnack_graph()
-        self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_AI_ARTICLE_GENERATIONS)
+        self.semaphore = asyncio.Semaphore(settings.AI_ARTICLE_MAX_CONCURRENT_GENERATIONS)
 
     async def run_batch_ai_articles_pipeline(self, issue_ids: List[int]):
         """
@@ -24,9 +24,9 @@ class WorkflowService:
         async def wrapped_pipeline(issue_id: int):
             # 세마포어 획득
             async with self.semaphore:
-                await asyncio.sleep(5)
+                await asyncio.sleep(settings.AI_ARTICLE_GENERATION_DELAY_SECONDS)
 
-                logger.info(f"[Batch] Starting issue {issue_id} (Active slots: {self.semaphore._value})")
+                logger.info(f"[Batch] Starting issue {issue_id}")
                 await self.run_ai_article_pipeline(issue_id)
         
         # 모든 이슈에 대해 작업 생성 후 동시에 실행
