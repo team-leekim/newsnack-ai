@@ -221,6 +221,7 @@ __marimo__/
 
 # etc
 .cursor/
+.github/instructions/
 test/
 data/
 output/
