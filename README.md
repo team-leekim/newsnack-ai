@@ -11,13 +11,14 @@
 
 ## 기술 스택
 
-[![FastAPI]][FastAPI url]  
-[![LangGraph]][LangGraph url]  
-[![Google Gemini]][Google Gemini url]  
-[![OpenAI]][OpenAI url]  
-[![PostgreSQL]][PostgreSQL url]  
-[![AWS S3]][AWS S3 url]  
-[![Python]][Python url]  
+[![FastAPI]][FastAPI url]
+[![LangGraph]][LangGraph url]
+[![LangChain]][LangChain url]
+[![Google Gemini]][Google Gemini url]
+[![OpenAI]][OpenAI url]
+[![PostgreSQL]][PostgreSQL url]
+[![AWS S3]][AWS S3 url]
+[![Python]][Python url]
 
 ## 동작 방식
 
@@ -105,6 +106,8 @@ uvicorn app.main:app --reload
 [FastAPI url]: https://fastapi.tiangolo.com/
 [LangGraph]: https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white
 [LangGraph url]: https://www.langchain.com/langgraph/
+[LangChain]: https://img.shields.io/badge/langchain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white
+[LangChain url]: https://www.langchain.com/
 [Google Gemini]: https://img.shields.io/badge/Google%20Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white
 [Google Gemini url]: https://ai.google.dev/gemini-api/docs/
 [OpenAI]: https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white
