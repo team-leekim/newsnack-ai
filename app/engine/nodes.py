@@ -307,7 +307,7 @@ async def select_hot_articles_node(state: TodayNewsnackState):
     selected_issue_ids = set()
 
     # 최근 이슈 중에서 화제성 판단
-    time_limit = datetime.now() - timedelta(hours=24)
+    time_limit = datetime.now() - timedelta(hours=settings.TODAY_NEWSNACK_ISSUE_TIME_WINDOW_HOURS)
     
     hot_issues = (
         db.query(Issue.id)
