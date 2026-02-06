@@ -6,8 +6,8 @@
 
 - 외부 파이프라인에서 API 호출로 AI 기사/브리핑 생성
 - 이슈별 AI 기사 생성(웹툰 또는 카드뉴스)
-- 하루 2회 오늘의 뉴스낵(Top 5 오디오 브리핑) 자동 생성
-- 멀티 프로바이더 지원: Google Gemini 기본, OpenAI로 전환 가능
+- 오늘의 뉴스낵(Top 5 오디오 브리핑) 생성
+- 멀티 프로바이더 지원: Google, OpenAI 사용 가능
 
 ## 기술 스택
 
@@ -29,6 +29,8 @@
 
 ## 아키텍처
 
+> 외부 오케스트레이션 시스템과 AI 서버의 관계
+
 ```mermaid
 sequenceDiagram
     participant Scheduler as 외부 오케스트레이션(Airflow 등)
@@ -41,7 +43,7 @@ sequenceDiagram
     Scheduler->>API: POST /ai-articles
     API->>Graph: AI 기사 워크플로 실행
     Graph->>LLM: 기사 분석/본문/프롬프트 생성
-    Graph->>LLM: 이미지/오디오 생성
+    Graph->>LLM: 이미지 생성
     Graph->>S3: 이미지 업로드
     Graph->>DB: ai_article 저장
 
@@ -52,6 +54,72 @@ sequenceDiagram
     Graph->>S3: 오디오 업로드
     Graph->>DB: today_newsnack 저장
 ```
+
+## 워크플로우
+
+### AI 기사 생성 플로우
+
+> LangGraph StateGraph로 구현된 이슈별 AI 기사 생성 워크플로
+
+```mermaid
+graph TD
+    Start[시작] --> Analyze[뉴스 분석<br/>analyze_article_node]
+    Analyze --> |제목/요약/타입 결정| SelectEditor[에디터 선정<br/>select_editor_node]
+    SelectEditor --> |카테고리 매칭 or 랜덤| Branch{콘텐츠 타입}
+    
+    Branch --> |WEBTOON| Webtoon[웹툰 본문 생성<br/>webtoon_creator_node]
+    Branch --> |CARD_NEWS| CardNews[카드뉴스 본문 생성<br/>card_news_creator_node]
+    
+    Webtoon --> |본문 + 이미지 프롬프트 4개| ImageGen[이미지 생성<br/>image_gen_node]
+    CardNews --> |본문 + 이미지 프롬프트 4개| ImageGen
+    
+    ImageGen --> |병렬 생성 전략| ImageStrategy{프로바이더}
+    ImageStrategy --> |OpenAI| OpenAI[4장 전면 병렬 생성]
+    ImageStrategy --> |Google + 참조 O| GoogleRef[1장 생성 후<br/>3장 참조 병렬 생성]
+    ImageStrategy --> |Google + 참조 X| GoogleNoRef[4장 전면 병렬 생성]
+    
+    OpenAI --> Save[DB 저장<br/>save_ai_article_node]
+    GoogleRef --> Save
+    GoogleNoRef --> Save
+    
+    Save --> |ai_article + reaction_count<br/>issue.is_processed = true| End[종료]
+```
+
+**주요 노드 설명:**
+- `analyze_article_node`: 원본 기사 분석, 제목/요약 생성, 콘텐츠 타입(웹툰/카드뉴스) 결정
+- `select_editor_node`: 이슈의 카테고리와 일치하는 에디터 배정 (없으면 랜덤)
+- `webtoon_creator_node` / `card_news_creator_node`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성
+- `image_gen_node`: 프로바이더별 이미지 생성 전략 실행
+  - OpenAI: 4장 전면 병렬 생성
+  - Google (참조 O): 1장 기준 이미지 생성 후 나머지 3장을 참조해 병렬 생성
+  - Google (참조 X): 4장 전면 병렬 생성
+- `save_ai_article_node`: ai_article 테이블 저장, reaction_count 초기화, 이슈 처리 상태 업데이트
+
+### 오늘의 뉴스낵 브리핑 플로우
+
+> 화제성 높은 기사 5개를 선별해 하나의 오디오 브리핑으로 생성
+
+```mermaid
+graph TD
+    Start[시작] --> Select[대상 기사 선정<br/>select_hot_articles_node]
+    Select --> |최근 처리된 이슈 중<br/>화제성 Top 5| Assemble[브리핑 대본 생성<br/>assemble_briefing_node]
+    Assemble --> |5개 기사 대본 병합| Audio[오디오 생성<br/>generate_audio_node]
+    Audio --> |TTS + 타임라인 계산| AudioStrategy{프로바이더}
+    
+    AudioStrategy --> |OpenAI| OpenAITTS[OpenAI TTS]
+    AudioStrategy --> |Google| GoogleTTS[Gemini TTS]
+    
+    OpenAITTS --> Save[DB 저장<br/>save_today_newsnack_node]
+    GoogleTTS --> Save
+    
+    Save --> |today_newsnack<br/>audio_url + briefing_articles| End[종료]
+```
+
+**주요 노드 설명:**
+- `select_hot_articles_node`: 최근 시간 윈도우 내 이슈 중 원본 기사 수가 많은 순으로 5개 선정 (부족 시 최신 AI 기사로 보충)
+- `assemble_briefing_node`: 5개 기사를 구조화된 대본으로 변환
+- `generate_audio_node`: 대본을 하나로 병합 후 TTS 생성, 오디오 길이 측정 및 타임라인 계산
+- `save_today_newsnack_node`: S3 업로드 및 today_newsnack 테이블 저장
 
 ## 시스템 구성
 
@@ -104,11 +172,11 @@ uvicorn app.main:app --reload
 <!-- MARKDOWN LINKS & IMAGES -->
 [FastAPI]: https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white
 [FastAPI url]: https://fastapi.tiangolo.com/
-[LangGraph]: https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white
+[LangGraph]: https://img.shields.io/badge/langgraph-1C3C3C?style=for-the-badge&logo=langgraph&logoColor=white
 [LangGraph url]: https://www.langchain.com/langgraph/
 [LangChain]: https://img.shields.io/badge/langchain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white
 [LangChain url]: https://www.langchain.com/
-[Google Gemini]: https://img.shields.io/badge/Google%20Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white
+[Google Gemini]: https://img.shields.io/badge/google%20gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white
 [Google Gemini url]: https://ai.google.dev/gemini-api/docs/
 [OpenAI]: https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white
 [OpenAI url]: https://openai.com/
