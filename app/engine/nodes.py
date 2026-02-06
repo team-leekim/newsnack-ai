@@ -25,6 +25,7 @@ from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
 from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
+from app.engine.prompts import TTS_INSTRUCTIONS, create_tts_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -383,7 +384,6 @@ async def assemble_briefing_node(state: TodayNewsnackState):
 
 async def generate_google_audio_task(full_script: str):
     """Google Gemini TTS를 사용한 오디오 생성 태스크"""
-    from app.engine.prompts import create_tts_prompt
     
     client = ai_factory.get_audio_client()
     prompt = create_tts_prompt(full_script)
@@ -409,7 +409,6 @@ async def generate_google_audio_task(full_script: str):
 
 async def generate_openai_audio_task(full_script: str):
     """OpenAI 전용 오디오 생성 태스크"""
-    from app.engine.prompts import TTS_INSTRUCTIONS
     
     client = ai_factory.get_audio_client()
     
