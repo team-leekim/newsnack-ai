@@ -17,17 +17,17 @@ from .prompts import (
     create_webtoon_template,
     create_card_news_template,
     create_briefing_template,
+    ImageStyle,
+    create_image_prompt,
+    create_google_image_prompt,
 )
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
 from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
+from app.engine.prompts import TTS_INSTRUCTIONS, create_tts_prompt
 
 logger = logging.getLogger(__name__)
-
-# 스타일 래퍼 정의
-WEBTOON_STYLE = "Modern digital webtoon art style, clean line art, vibrant cel-shading. Character must have consistent hair and outfit from the reference. "
-CARDNEWS_STYLE = "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. Maintain exact same color palette and layout style. "
 
 # 현재 설정된 프로바이더의 LLM
 llm = ai_factory.get_llm()
@@ -137,8 +137,8 @@ async def card_news_creator_node(state: AiArticleState):
 async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
     """OpenAI를 사용한 개별 이미지 생성"""
     client = ai_factory.get_image_client()
-    style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
-    final_prompt = f"{style} {prompt}. Ensure all text is in Korean if any."
+    style = ImageStyle.get_style(content_type)
+    final_prompt = create_image_prompt(style, prompt)
 
     try:
         response = await client.images.generate(
@@ -165,20 +165,22 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
 async def generate_google_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
     """Gemini를 사용한 개별 이미지 생성"""
     client = ai_factory.get_image_client()
-    style = WEBTOON_STYLE if content_type == "WEBTOON" else CARDNEWS_STYLE
-
-    instruction = "Write all text for Korean readers. Use Korean for general text, but keep proper nouns, brand names, and English acronyms in English. Ensure all text is legible."
-    if content_type == "CARD_NEWS":
-        instruction += " Focus on infographic elements and consistent background color."
+    style = ImageStyle.get_style(content_type)
     
-    final_prompt = f"{style} {prompt}. {instruction}"
+    # 프롬프트 생성 (참조 이미지 사용 여부 반영)
+    with_reference = bool(ref_image_path and os.path.exists(ref_image_path))
+    final_prompt = create_google_image_prompt(
+        style=style,
+        prompt=prompt,
+        content_type=content_type,
+        with_reference=with_reference
+    )
     contents = [final_prompt]
 
     # 기준 이미지(이미지 0번)가 있으면 참조로 주입
-    if ref_image_path and os.path.exists(ref_image_path):
+    if with_reference:
         ref_img = Image.open(ref_image_path)
         contents.append(ref_img)
-        contents[0] += " Use the reference image ONLY to maintain character/style consistency. IGNORE its composition and pose."
 
     image_model = (
         settings.GOOGLE_IMAGE_MODEL_WITH_REFERENCE
@@ -307,7 +309,7 @@ async def select_hot_articles_node(state: TodayNewsnackState):
     selected_issue_ids = set()
 
     # 최근 이슈 중에서 화제성 판단
-    time_limit = datetime.now() - timedelta(hours=24)
+    time_limit = datetime.now() - timedelta(hours=settings.TODAY_NEWSNACK_ISSUE_TIME_WINDOW_HOURS)
     
     hot_issues = (
         db.query(Issue.id)
@@ -382,8 +384,9 @@ async def assemble_briefing_node(state: TodayNewsnackState):
 
 async def generate_google_audio_task(full_script: str):
     """Google Gemini TTS를 사용한 오디오 생성 태스크"""
+    
     client = ai_factory.get_audio_client()
-    prompt = f"{settings.TTS_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{full_script}"
+    prompt = create_tts_prompt(full_script)
     
     response = await client.aio.models.generate_content(
         model=settings.GOOGLE_TTS_MODEL,
@@ -406,13 +409,14 @@ async def generate_google_audio_task(full_script: str):
 
 async def generate_openai_audio_task(full_script: str):
     """OpenAI 전용 오디오 생성 태스크"""
+    
     client = ai_factory.get_audio_client()
     
     async with client.audio.speech.with_streaming_response.create(
         model=settings.OPENAI_TTS_MODEL,
         voice=settings.OPENAI_TTS_VOICE,
         input=full_script,
-        instructions=settings.TTS_INSTRUCTIONS
+        instructions=TTS_INSTRUCTIONS
     ) as response:
         # 전체 오디오 바이너리를 메모리로 읽어옴
         audio_bytes = await response.read()

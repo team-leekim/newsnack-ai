@@ -21,14 +21,6 @@ class Settings(BaseSettings):
     # TTS Settings
     GOOGLE_TTS_VOICE: str = "Achird"
     OPENAI_TTS_VOICE: str = "marin"
-    TTS_INSTRUCTIONS: str = """
-    A natural, conversational voice of a smart and friendly 'Otter' character in the late 20s. 
-    The tone is exceptionally bright, energetic, and engaging, like a 'smart friend' enthusiastically explaining an interesting topic. 
-    Avoid a rigid broadcast style. Use a fluid, melodic intonation with a 'soft and cute' edge, yet remain professional and trustworthy. 
-    The delivery should be lighthearted, with natural pauses for breath and thought, as if the speaker is genuinely excited about the news. 
-    Ensure sentence endings are smooth and friendly (not formal or clipped). 
-    The overall vibe is 'intelligent, approachable, and bubbly'.
-    """
 
     # API Keys
     API_KEY: str
@@ -45,6 +37,7 @@ class Settings(BaseSettings):
     # Other Settings
     AI_ARTICLE_MAX_CONCURRENT_GENERATIONS: int = 2
     AI_ARTICLE_GENERATION_DELAY_SECONDS: int = 5
+    TODAY_NEWSNACK_ISSUE_TIME_WINDOW_HOURS: int = 14
 
     @model_validator(mode='after')
     def check_api_keys(self) -> 'Settings':

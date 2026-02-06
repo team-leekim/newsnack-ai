@@ -132,3 +132,109 @@ def create_briefing_template(num_articles: int) -> ChatPromptTemplate:
 [뉴스 데이터]
 {{articles}}"""),
     ])
+
+
+# ============================================================================
+# TTS 음성 생성 프롬프트
+# ============================================================================
+
+TTS_INSTRUCTIONS = """
+A natural, conversational voice of a smart and friendly 'Otter' character in the late 20s. 
+The tone is exceptionally bright, energetic, and engaging, like a 'smart friend' enthusiastically explaining an interesting topic. 
+Avoid a rigid broadcast style. Use a fluid, melodic intonation with a 'soft and cute' edge, yet remain professional and trustworthy. 
+The delivery should be lighthearted, with natural pauses for breath and thought, as if the speaker is genuinely excited about the news. 
+Ensure sentence endings are smooth and friendly (not formal or clipped). 
+The overall vibe is 'intelligent, approachable, and bubbly'.
+"""
+
+
+def create_tts_prompt(script: str) -> str:
+    """
+    TTS 음성 생성을 위한 프롬프트 생성
+    
+    Args:
+        script: 읽을 대본 텍스트
+        
+    Returns:
+        TTS API에 전달할 최종 프롬프트
+    """
+    return f"{TTS_INSTRUCTIONS}\n\n#### TRANSCRIPT\n{script}"
+
+
+# ============================================================================
+# 이미지 생성 스타일 프롬프트
+# ============================================================================
+
+class ImageStyle:
+    """이미지 생성 스타일 상수 관리"""
+    
+    WEBTOON = (
+        "Modern digital webtoon art style, clean line art, vibrant cel-shading. "
+        "Character must have consistent hair and outfit from the reference."
+    )
+    
+    CARD_NEWS = (
+        "Minimalist flat vector illustration, Instagram aesthetic, solid pastel background. "
+        "Maintain exact same color palette and layout style."
+    )
+    
+    @classmethod
+    def get_style(cls, content_type: str) -> str:
+        """콘텐츠 타입에 따른 스타일 반환"""
+        if content_type == "WEBTOON":
+            return cls.WEBTOON
+        elif content_type == "CARD_NEWS":
+            return cls.CARD_NEWS
+        else:
+            raise ValueError(f"Unknown content_type: {content_type}")
+
+
+def create_image_prompt(style: str, prompt: str, language: str = "Korean") -> str:
+    """이미지 생성 프롬프트 조합
+    
+    Args:
+        style: 이미지 스타일 (ImageStyle.WEBTOON 또는 ImageStyle.CARD_NEWS)
+        prompt: 기본 프롬프트
+        language: 텍스트 언어 (기본값: Korean)
+    
+    Returns:
+        최종 이미지 생성 프롬프트
+    """
+    return f"{style} {prompt}. Ensure all text is in {language} if any."
+
+
+def create_google_image_prompt(
+    style: str,
+    prompt: str,
+    content_type: str,
+    with_reference: bool = False
+) -> str:
+    """Google Gemini 이미지 생성 전용 프롬프트
+    
+    Args:
+        style: 이미지 스타일
+        prompt: 기본 프롬프트
+        content_type: 콘텐츠 타입 (WEBTOON/CARD_NEWS)
+        with_reference: 참조 이미지 사용 여부
+    
+    Returns:
+        최종 프롬프트
+    """
+    instruction = (
+        "Write all text for Korean readers. "
+        "Use Korean for general text, but keep proper nouns, brand names, "
+        "and English acronyms in English. Ensure all text is legible."
+    )
+    
+    if content_type == "CARD_NEWS":
+        instruction += " Focus on infographic elements and consistent background color."
+    
+    final_prompt = f"{style} {prompt}. {instruction}"
+    
+    if with_reference:
+        final_prompt += (
+            " Use the reference image ONLY to maintain character/style consistency. "
+            "IGNORE its composition and pose."
+        )
+    
+    return final_prompt
