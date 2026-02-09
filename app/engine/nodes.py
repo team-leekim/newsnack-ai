@@ -93,7 +93,7 @@ async def analyze_article_node(state: AiArticleState):
     }
 
 
-async def webtoon_creator_node(state: AiArticleState):
+async def webtoon_text_creator_node(state: AiArticleState):
     """웹툰 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     title = state['final_title']
@@ -114,7 +114,7 @@ async def webtoon_creator_node(state: AiArticleState):
     }
 
 
-async def card_news_creator_node(state: AiArticleState):
+async def card_news_text_creator_node(state: AiArticleState):
     """카드뉴스 스타일 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     title = state['final_title']
@@ -294,7 +294,6 @@ async def image_gen_node(state: AiArticleState):
 
 async def save_ai_article_node(state: AiArticleState):
     """최종 결과물 DB 저장"""
-    # TODO: 이미지 생성에 실패한 경우 예외 처리 필요
     db: Session = state['db_session']
     issue_id = state['issue_id']
     
