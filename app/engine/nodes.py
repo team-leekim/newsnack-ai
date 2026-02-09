@@ -134,8 +134,12 @@ async def card_news_creator_node(state: AiArticleState):
     }
 
 
-async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
-    """OpenAI를 사용한 개별 이미지 생성"""
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, min=2, max=10)
+)
+async def generate_openai_image_task(idx: int, prompt: str, content_type: str) -> Image.Image:
+    """OpenAI를 사용한 개별 이미지 생성 (재시도 포함)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
     final_prompt = create_image_prompt(style, prompt)
@@ -154,21 +158,24 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         img_data = base64.b64decode(b64_data)
         img = Image.open(BytesIO(img_data))
         
-        s3_url = await upload_image_to_s3(content_key, idx, img)
-        return s3_url
+        return img  # PIL Image 객체 반환
         
     except Exception as e:
         logger.error(f"Error generating OpenAI image {idx}: {e}")
-        return None
+        raise
 
 
-async def generate_google_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
-    """Gemini를 사용한 개별 이미지 생성"""
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, min=2, max=10)
+)
+async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None) -> Image.Image:
+    """Gemini를 사용한 개별 이미지 생성 (재시도 포함, 메모리 기반 참조)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
     
     # 프롬프트 생성 (참조 이미지 사용 여부 반영)
-    with_reference = bool(ref_image_path and os.path.exists(ref_image_path))
+    with_reference = bool(ref_image is not None)
     final_prompt = create_google_image_prompt(
         style=style,
         prompt=prompt,
@@ -177,10 +184,9 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
     )
     contents = [final_prompt]
 
-    # 기준 이미지(이미지 0번)가 있으면 참조로 주입
+    # 참조 이미지가 있으면 메모리의 PIL Image 객체를 주입
     if with_reference:
-        ref_img = Image.open(ref_image_path)
-        contents.append(ref_img)
+        contents.append(ref_image)
 
     image_model = (
         settings.GOOGLE_IMAGE_MODEL_WITH_REFERENCE
@@ -205,13 +211,12 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
-            # Pro 모델만 0번 이미지를 로컬에 저장
-            local_path = save_image_to_local(content_key, idx, img) if (idx == 0 and settings.GOOGLE_IMAGE_WITH_REFERENCE) else None
-            s3_url = await upload_image_to_s3(content_key, idx, img)
-            return {"local_path": local_path, "s3_url": s3_url}
+            return img  # PIL Image 객체 반환
+        else:
+            raise ValueError(f"No image data in response for image {idx}")
     except Exception as e:
         logger.error(f"Error generating image {idx}: {e}")
-    return None
+        raise
 
 
 async def image_gen_node(state: AiArticleState):
