@@ -489,21 +489,30 @@ async def generate_audio_node(state: TodayNewsnackState):
     # 5개 기사 대본을 하나로 합침
     full_script = " ".join([s["script"] for s in segments])
     
-    if settings.AI_PROVIDER == "openai":
-        logger.info("[AudioGen] Using OpenAI TTS")
-        audio_bytes = await generate_openai_audio_task(full_script)
-    else:
-        logger.info("[AudioGen] Using Google Gemini TTS")
-        audio_bytes = await generate_google_audio_task(full_script)
+    try:
+        if settings.AI_PROVIDER == "openai":
+            logger.info("[AudioGen] Using OpenAI TTS")
+            audio_bytes = await generate_openai_audio_task(full_script)
+        else:
+            logger.info("[AudioGen] Using Google Gemini TTS")
+            audio_bytes = await generate_google_audio_task(full_script)
+        
+        # 오디오 길이 측정 및 타임라인 계산
+        duration = get_audio_duration_from_bytes(audio_bytes)
+        if not duration or duration <= 0:
+            raise ValueError(f"Invalid audio duration: {duration}")
+        
+        briefing_articles_data = calculate_article_timelines(segments, duration)
+        
+        logger.info(f"[AudioGen] Successfully generated audio. Duration: {duration}s")
+        return {
+            "total_audio_bytes": audio_bytes,
+            "briefing_articles_data": briefing_articles_data
+        }
     
-    # 오디오 길이 측정 및 타임라인 계산
-    duration = get_audio_duration_from_bytes(audio_bytes)
-    briefing_articles_data = calculate_article_timelines(segments, duration)
-    
-    return {
-        "total_audio_bytes": audio_bytes,
-        "briefing_articles_data": briefing_articles_data
-    }
+    except Exception as e:
+        logger.error(f"[AudioGen] Failed to generate audio after retries: {e}")
+        raise ValueError(f"오디오 생성 실패: {e}")
 
 
 async def save_today_newsnack_node(state: TodayNewsnackState):
