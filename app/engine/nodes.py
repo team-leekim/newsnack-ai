@@ -24,7 +24,7 @@ from .prompts import (
 )
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
+from app.utils.image import upload_image_to_s3
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 from app.engine.prompts import TTS_INSTRUCTIONS, create_tts_prompt
 
