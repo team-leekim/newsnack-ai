@@ -239,7 +239,7 @@ async def image_gen_node(state: AiArticleState):
             
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    raise ValueError(f"이미지 {i} 생성 실패: {result}")
+                    raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
                 images.append(result)
             
         else:
@@ -259,7 +259,7 @@ async def image_gen_node(state: AiArticleState):
                 
                 for i, result in enumerate(results, start=1):
                     if isinstance(result, Exception):
-                        raise ValueError(f"이미지 {i} 생성 실패: {result}")
+                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
                     images.append(result)
                 
             else:
@@ -272,7 +272,7 @@ async def image_gen_node(state: AiArticleState):
                 
                 for i, result in enumerate(results):
                     if isinstance(result, Exception):
-                        raise ValueError(f"이미지 {i} 생성 실패: {result}")
+                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
                     images.append(result)
         
         # 모든 이미지가 성공적으로 생성되었을 때만 S3 업로드
@@ -289,7 +289,7 @@ async def image_gen_node(state: AiArticleState):
         
     except Exception as e:
         logger.error(f"[ImageGen] Generation failed for {content_key}: {e}")
-        raise ValueError(f"이미지 생성 실패: {e}")
+        raise ValueError(f"이미지 생성 실패: {e}") from e
 
 
 async def save_ai_article_node(state: AiArticleState):
@@ -512,7 +512,7 @@ async def generate_audio_node(state: TodayNewsnackState):
     
     except Exception as e:
         logger.error(f"[AudioGen] Failed to generate audio after retries: {e}")
-        raise ValueError(f"오디오 생성 실패: {e}")
+        raise ValueError(f"오디오 생성 실패: {e}") from e
 
 
 async def save_today_newsnack_node(state: TodayNewsnackState):
