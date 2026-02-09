@@ -37,7 +37,7 @@ sequenceDiagram
     participant API as FastAPI AI 서버
     participant Graph as LangGraph 워크플로
     participant LLM as Gemini/OpenAI
-    participant S3 as S3
+    participant S3 as Amazon S3
     participant DB as PostgreSQL(RDS)
 
     Scheduler->>API: POST /ai-articles
@@ -48,7 +48,7 @@ sequenceDiagram
     Graph->>DB: ai_article 저장
 
     Scheduler->>API: POST /today-newsnack
-    API->>Graph: 뉴스낵 워크플로 실행
+    API->>Graph: 오늘의 뉴스낵 워크플로 실행
     Graph->>LLM: 브리핑 대본 생성
     Graph->>LLM: TTS 오디오 생성
     Graph->>S3: 오디오 업로드
