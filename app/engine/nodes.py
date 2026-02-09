@@ -225,42 +225,71 @@ async def image_gen_node(state: AiArticleState):
     content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
-
-    if settings.AI_PROVIDER == "openai":
-        # OpenAI 전략: 참조 없이 4장 전면 병렬 생성
-        logger.info(f"[ImageGen] Using OpenAI for {content_key}")
-        tasks = [
-            generate_openai_image_task(content_key, i, prompts[i], content_type)
-            for i in range(4)
-        ]
-        image_urls = await asyncio.gather(*tasks)
-        all_paths = [u for u in image_urls if u]
-    else:
-        if settings.GOOGLE_IMAGE_WITH_REFERENCE:
-            # Google 전략: 1장 생성 후 3장 참조 병렬 생성 (Pro 모델)
-            logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
-            anchor_image = await generate_google_image_task(content_key, 0, prompts[0], content_type)
-            if not anchor_image or not anchor_image.get("local_path") or not anchor_image.get("s3_url"):
-                return {"error": "기준 이미지 생성 실패"}
-
+    
+    images = []  # PIL Image 객체들을 메모리에 보관
+    
+    try:
+        if settings.AI_PROVIDER == "openai":
+            logger.info(f"[ImageGen] Using OpenAI for {content_key}")
             tasks = [
-                generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image["local_path"])
-                for i in range(1, 4)
-            ]
-            parallel_paths = await asyncio.gather(*tasks)
-            all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-            cleanup_local_reference_image_directory(content_key)
-        else:
-            # Google 전략: 참조 없이 4장 전면 병렬 생성 (Flash 모델)
-            logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
-            tasks = [
-                generate_google_image_task(content_key, i, prompts[i], content_type)
+                generate_openai_image_task(i, prompts[i], content_type)
                 for i in range(4)
             ]
-            parallel_paths = await asyncio.gather(*tasks)
-            all_paths = [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-
-    return {"image_urls": all_paths}
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    raise ValueError(f"이미지 {i} 생성 실패: {result}")
+                images.append(result)
+            
+        else:
+            if settings.GOOGLE_IMAGE_WITH_REFERENCE:
+                logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
+                
+                # 0번 이미지 생성 (기준 이미지)
+                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
+                images.append(anchor_image)
+                
+                # 1-3번 이미지 생성 (0번 이미지를 참조로 사용)
+                tasks = [
+                    generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image)
+                    for i in range(1, 4)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for i, result in enumerate(results, start=1):
+                    if isinstance(result, Exception):
+                        raise ValueError(f"이미지 {i} 생성 실패: {result}")
+                    images.append(result)
+                
+            else:
+                logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
+                tasks = [
+                    generate_google_image_task(i, prompts[i], content_type)
+                    for i in range(4)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        raise ValueError(f"이미지 {i} 생성 실패: {result}")
+                    images.append(result)
+        
+        # 모든 이미지가 성공적으로 생성되었을 때만 S3 업로드
+        logger.info(f"[ImageGen] All 4 images generated successfully. Uploading to S3...")
+        image_urls = []
+        for idx, img in enumerate(images):
+            s3_url = await upload_image_to_s3(content_key, idx, img)
+            if not s3_url:
+                raise ValueError(f"S3 업로드 실패: 이미지 {idx}")
+            image_urls.append(s3_url)
+        
+        logger.info(f"[ImageGen] Successfully saved all images to S3 for {content_key}")
+        return {"image_urls": image_urls}
+        
+    except Exception as e:
+        logger.error(f"[ImageGen] Generation failed for {content_key}: {e}")
+        raise ValueError(f"이미지 생성 실패: {e}")
 
 
 async def save_ai_article_node(state: AiArticleState):
