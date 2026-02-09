@@ -9,6 +9,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 from langchain_core.messages import SystemMessage, HumanMessage
 from datetime import datetime, timedelta
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
@@ -23,7 +24,7 @@ from .prompts import (
 )
 from app.core.config import settings
 from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
-from app.utils.image import upload_image_to_s3, save_image_to_local, cleanup_local_reference_image_directory
+from app.utils.image import upload_image_to_s3
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 from app.engine.prompts import TTS_INSTRUCTIONS, create_tts_prompt
 
@@ -134,8 +135,12 @@ async def card_news_creator_node(state: AiArticleState):
     }
 
 
-async def generate_openai_image_task(content_key: str, idx: int, prompt: str, content_type: str):
-    """OpenAI를 사용한 개별 이미지 생성"""
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, min=2, max=10)
+)
+async def generate_openai_image_task(idx: int, prompt: str, content_type: str) -> Image.Image:
+    """OpenAI를 사용한 개별 이미지 생성 (재시도 포함)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
     final_prompt = create_image_prompt(style, prompt)
@@ -154,21 +159,24 @@ async def generate_openai_image_task(content_key: str, idx: int, prompt: str, co
         img_data = base64.b64decode(b64_data)
         img = Image.open(BytesIO(img_data))
         
-        s3_url = await upload_image_to_s3(content_key, idx, img)
-        return s3_url
+        return img  # PIL Image 객체 반환
         
     except Exception as e:
         logger.error(f"Error generating OpenAI image {idx}: {e}")
-        return None
+        raise
 
 
-async def generate_google_image_task(content_key: str, idx: int, prompt: str, content_type: str, ref_image_path=None):
-    """Gemini를 사용한 개별 이미지 생성"""
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, min=2, max=10)
+)
+async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None) -> Image.Image:
+    """Gemini를 사용한 개별 이미지 생성 (재시도 포함, 메모리 기반 참조)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
     
     # 프롬프트 생성 (참조 이미지 사용 여부 반영)
-    with_reference = bool(ref_image_path and os.path.exists(ref_image_path))
+    with_reference = bool(ref_image is not None)
     final_prompt = create_google_image_prompt(
         style=style,
         prompt=prompt,
@@ -177,10 +185,9 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
     )
     contents = [final_prompt]
 
-    # 기준 이미지(이미지 0번)가 있으면 참조로 주입
+    # 참조 이미지가 있으면 메모리의 PIL Image 객체를 주입
     if with_reference:
-        ref_img = Image.open(ref_image_path)
-        contents.append(ref_img)
+        contents.append(ref_image)
 
     image_model = (
         settings.GOOGLE_IMAGE_MODEL_WITH_REFERENCE
@@ -205,13 +212,12 @@ async def generate_google_image_task(content_key: str, idx: int, prompt: str, co
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
-            # Pro 모델만 0번 이미지를 로컬에 저장
-            local_path = save_image_to_local(content_key, idx, img) if (idx == 0 and settings.GOOGLE_IMAGE_WITH_REFERENCE) else None
-            s3_url = await upload_image_to_s3(content_key, idx, img)
-            return {"local_path": local_path, "s3_url": s3_url}
+            return img  # PIL Image 객체 반환
+        else:
+            raise ValueError(f"No image data in response for image {idx}")
     except Exception as e:
         logger.error(f"Error generating image {idx}: {e}")
-    return None
+        raise
 
 
 async def image_gen_node(state: AiArticleState):
@@ -219,42 +225,71 @@ async def image_gen_node(state: AiArticleState):
     content_key = state['content_key']
     content_type = state['content_type']
     prompts = state['image_prompts']
-
-    if settings.AI_PROVIDER == "openai":
-        # OpenAI 전략: 참조 없이 4장 전면 병렬 생성
-        logger.info(f"[ImageGen] Using OpenAI for {content_key}")
-        tasks = [
-            generate_openai_image_task(content_key, i, prompts[i], content_type)
-            for i in range(4)
-        ]
-        image_urls = await asyncio.gather(*tasks)
-        all_paths = [u for u in image_urls if u]
-    else:
-        if settings.GOOGLE_IMAGE_WITH_REFERENCE:
-            # Google 전략: 1장 생성 후 3장 참조 병렬 생성 (Pro 모델)
-            logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
-            anchor_image = await generate_google_image_task(content_key, 0, prompts[0], content_type)
-            if not anchor_image or not anchor_image.get("local_path") or not anchor_image.get("s3_url"):
-                return {"error": "기준 이미지 생성 실패"}
-
+    
+    images = []  # PIL Image 객체들을 메모리에 보관
+    
+    try:
+        if settings.AI_PROVIDER == "openai":
+            logger.info(f"[ImageGen] Using OpenAI for {content_key}")
             tasks = [
-                generate_google_image_task(content_key, i, prompts[i], content_type, anchor_image["local_path"])
-                for i in range(1, 4)
-            ]
-            parallel_paths = await asyncio.gather(*tasks)
-            all_paths = [anchor_image.get("s3_url")] + [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-            cleanup_local_reference_image_directory(content_key)
-        else:
-            # Google 전략: 참조 없이 4장 전면 병렬 생성 (Flash 모델)
-            logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
-            tasks = [
-                generate_google_image_task(content_key, i, prompts[i], content_type)
+                generate_openai_image_task(i, prompts[i], content_type)
                 for i in range(4)
             ]
-            parallel_paths = await asyncio.gather(*tasks)
-            all_paths = [p.get("s3_url") for p in parallel_paths if p and p.get("s3_url")]
-
-    return {"image_urls": all_paths}
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
+                images.append(result)
+            
+        else:
+            if settings.GOOGLE_IMAGE_WITH_REFERENCE:
+                logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
+                
+                # 0번 이미지 생성 (기준 이미지)
+                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
+                images.append(anchor_image)
+                
+                # 1-3번 이미지 생성 (0번 이미지를 참조로 사용)
+                tasks = [
+                    generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image)
+                    for i in range(1, 4)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for i, result in enumerate(results, start=1):
+                    if isinstance(result, Exception):
+                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
+                    images.append(result)
+                
+            else:
+                logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
+                tasks = [
+                    generate_google_image_task(i, prompts[i], content_type)
+                    for i in range(4)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
+                    images.append(result)
+        
+        # 모든 이미지가 성공적으로 생성되었을 때만 S3 업로드
+        logger.info(f"[ImageGen] All 4 images generated successfully. Uploading to S3...")
+        image_urls = []
+        for idx, img in enumerate(images):
+            s3_url = await upload_image_to_s3(content_key, idx, img)
+            if not s3_url:
+                raise ValueError(f"S3 업로드 실패: 이미지 {idx}")
+            image_urls.append(s3_url)
+        
+        logger.info(f"[ImageGen] Successfully saved all images to S3 for {content_key}")
+        return {"image_urls": image_urls}
+        
+    except Exception as e:
+        logger.error(f"[ImageGen] Generation failed for {content_key}: {e}")
+        raise ValueError(f"이미지 생성 실패: {e}") from e
 
 
 async def save_ai_article_node(state: AiArticleState):
@@ -382,46 +417,70 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     return {"briefing_segments": segments}
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, min=2, max=10)
+)
 async def generate_google_audio_task(full_script: str):
-    """Google Gemini TTS를 사용한 오디오 생성 태스크"""
+    """Google Gemini TTS를 사용한 오디오 생성 태스크 (재시도 포함)"""
     
     client = ai_factory.get_audio_client()
     prompt = create_tts_prompt(full_script)
     
-    response = await client.aio.models.generate_content(
-        model=settings.GOOGLE_TTS_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=settings.GOOGLE_TTS_VOICE
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.GOOGLE_TTS_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=settings.GOOGLE_TTS_VOICE
+                        )
                     )
                 )
             )
         )
-    )
 
-    raw_pcm = response.candidates[0].content.parts[0].inline_data.data
-    return convert_pcm_to_mp3(raw_pcm)
+        raw_pcm = response.candidates[0].content.parts[0].inline_data.data
+        audio_bytes = convert_pcm_to_mp3(raw_pcm)
+        
+        if not audio_bytes:
+            raise ValueError("Failed to convert PCM to MP3")
+        
+        return audio_bytes
+    except Exception as e:
+        logger.error(f"Error generating Google audio: {e}")
+        raise
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, min=2, max=10)
+)
 async def generate_openai_audio_task(full_script: str):
-    """OpenAI 전용 오디오 생성 태스크"""
+    """OpenAI 전용 오디오 생성 태스크 (재시도 포함)"""
     
     client = ai_factory.get_audio_client()
     
-    async with client.audio.speech.with_streaming_response.create(
-        model=settings.OPENAI_TTS_MODEL,
-        voice=settings.OPENAI_TTS_VOICE,
-        input=full_script,
-        instructions=TTS_INSTRUCTIONS
-    ) as response:
-        # 전체 오디오 바이너리를 메모리로 읽어옴
-        audio_bytes = await response.read()
-    
-    return audio_bytes
+    try:
+        async with client.audio.speech.with_streaming_response.create(
+            model=settings.OPENAI_TTS_MODEL,
+            voice=settings.OPENAI_TTS_VOICE,
+            input=full_script,
+            instructions=TTS_INSTRUCTIONS
+        ) as response:
+            # 전체 오디오 바이너리를 메모리로 읽어옴
+            audio_bytes = await response.read()
+        
+        if not audio_bytes:
+            raise ValueError("Failed to read audio from OpenAI response")
+        
+        return audio_bytes
+    except Exception as e:
+        logger.error(f"Error generating OpenAI audio: {e}")
+        raise
 
 
 async def generate_audio_node(state: TodayNewsnackState):
@@ -430,26 +489,34 @@ async def generate_audio_node(state: TodayNewsnackState):
     # 5개 기사 대본을 하나로 합침
     full_script = " ".join([s["script"] for s in segments])
     
-    if settings.AI_PROVIDER == "openai":
-        logger.info("[AudioGen] Using OpenAI TTS")
-        audio_bytes = await generate_openai_audio_task(full_script)
-    else:
-        logger.info("[AudioGen] Using Google Gemini TTS")
-        audio_bytes = await generate_google_audio_task(full_script)
+    try:
+        if settings.AI_PROVIDER == "openai":
+            logger.info("[AudioGen] Using OpenAI TTS")
+            audio_bytes = await generate_openai_audio_task(full_script)
+        else:
+            logger.info("[AudioGen] Using Google Gemini TTS")
+            audio_bytes = await generate_google_audio_task(full_script)
+        
+        # 오디오 길이 측정 및 타임라인 계산
+        duration = get_audio_duration_from_bytes(audio_bytes)
+        if not duration or duration <= 0:
+            raise ValueError(f"Invalid audio duration: {duration}")
+        
+        briefing_articles_data = calculate_article_timelines(segments, duration)
+        
+        logger.info(f"[AudioGen] Successfully generated audio. Duration: {duration}s")
+        return {
+            "total_audio_bytes": audio_bytes,
+            "briefing_articles_data": briefing_articles_data
+        }
     
-    # 오디오 길이 측정 및 타임라인 계산
-    duration = get_audio_duration_from_bytes(audio_bytes)
-    briefing_articles_data = calculate_article_timelines(segments, duration)
-    
-    return {
-        "total_audio_bytes": audio_bytes,
-        "briefing_articles_data": briefing_articles_data
-    }
+    except Exception as e:
+        logger.error(f"[AudioGen] Failed to generate audio after retries: {e}")
+        raise ValueError(f"오디오 생성 실패: {e}") from e
 
 
 async def save_today_newsnack_node(state: TodayNewsnackState):
     """생성된 오디오 및 타임라인 저장 노드"""
-    # TODO: 오디오 생성에 실패한 경우 예외 처리 필요
     db: Session = state["db_session"]
     audio_bytes = state["total_audio_bytes"]
     articles_data = state["briefing_articles_data"]
