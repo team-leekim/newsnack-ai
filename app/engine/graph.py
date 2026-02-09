@@ -3,8 +3,8 @@ from .state import AiArticleState, TodayNewsnackState
 from .nodes import (
     analyze_article_node,
     select_editor_node,
-    webtoon_creator_node, 
-    card_news_creator_node,
+    webtoon_text_creator_node, 
+    card_news_text_creator_node,
     image_gen_node,
     save_ai_article_node,
     select_hot_articles_node,
@@ -19,8 +19,8 @@ def create_ai_article_graph():
     # 1. 노드 등록
     workflow.add_node("analyze_article", analyze_article_node)
     workflow.add_node("select_editor", select_editor_node)
-    workflow.add_node("webtoon_text", webtoon_creator_node)
-    workflow.add_node("card_news_text", card_news_creator_node)
+    workflow.add_node("webtoon_text_gen", webtoon_text_creator_node)
+    workflow.add_node("card_news_text_gen", card_news_text_creator_node)
     workflow.add_node("image_gen", image_gen_node)
     workflow.add_node("save_ai_article", save_ai_article_node)
 
@@ -34,12 +34,12 @@ def create_ai_article_graph():
     workflow.add_conditional_edges(
         "select_editor",
         lambda x: "webtoon" if x["content_type"] == "WEBTOON" else "card_news",
-        {"webtoon": "webtoon_text", "card_news": "card_news_text"}
+        {"webtoon": "webtoon_text_gen", "card_news": "card_news_text_gen"}
     )
 
     # 5. 이미지 생성
-    workflow.add_edge("webtoon_text", "image_gen")
-    workflow.add_edge("card_news_text", "image_gen")
+    workflow.add_edge("webtoon_text_gen", "image_gen")
+    workflow.add_edge("card_news_text_gen", "image_gen")
     
     workflow.add_edge("image_gen", "save_ai_article")
     workflow.add_edge("save_ai_article", END)
