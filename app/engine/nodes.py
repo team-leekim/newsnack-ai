@@ -9,6 +9,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 from langchain_core.messages import SystemMessage, HumanMessage
 from datetime import datetime, timedelta
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from .providers import ai_factory
 from .state import AiArticleState, AnalysisResponse, BriefingResponse, EditorContentResponse, TodayNewsnackState
