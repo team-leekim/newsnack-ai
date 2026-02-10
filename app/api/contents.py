@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, status, HTTPException
 from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse
 from app.services.workflow_service import workflow_service
 
@@ -19,6 +19,13 @@ async def create_batch_ai_articles(
     request: AiArticleBatchGenerationRequest,
     background_tasks: BackgroundTasks,
 ):
+    non_pending = workflow_service.check_duplicate_issues(request.issue_ids)
+
+    if non_pending:
+        raise HTTPException(
+            status_code=409,
+            detail=f"처리중 또는 완료된 이슈입니다. issue_id:{non_pending}"
+        )
 
     background_tasks.add_task(workflow_service.run_batch_ai_articles_pipeline, request.issue_ids)
 

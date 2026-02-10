@@ -2,7 +2,6 @@ import asyncio
 import uuid
 import logging
 from typing import List
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
 from app.core.config import settings
@@ -17,6 +16,17 @@ class WorkflowService:
         self.graph = create_ai_article_graph()
         self.newsnack_graph = create_today_newsnack_graph()
         self.semaphore = asyncio.Semaphore(settings.AI_ARTICLE_MAX_CONCURRENT_GENERATIONS)
+
+    def check_duplicate_issues(self, issue_ids: List[int]) -> List[int]:
+        """
+        PENDING이 아닌 이슈 ID 리스트 반환
+        """
+        db: Session = SessionLocal()
+        try:
+            issues = db.query(Issue).filter(Issue.id.in_(issue_ids)).all()
+            return [issue.id for issue in issues if issue.processing_status != ProcessingStatusEnum.PENDING]
+        finally:
+            db.close()
 
     async def run_batch_ai_articles_pipeline(self, issue_ids: List[int]):
         """
@@ -45,11 +55,6 @@ class WorkflowService:
             if not issue:
                 logger.error(f"Issue ID {issue_id} not found.")
                 return
-
-            # 중복 요청 방지: PENDING만 허용
-            if issue.processing_status != ProcessingStatusEnum.PENDING:
-                logger.warning(f"Issue {issue_id} is not PENDING (current: {issue.processing_status}), rejecting request.")
-                raise HTTPException(status_code=409, detail="Issue is already being processed or completed.")
 
             raw_articles = issue.articles
             if not raw_articles:
