@@ -4,11 +4,17 @@ from app.services.workflow_service import workflow_service
 
 router = APIRouter(tags=["Content Generation"])
 
-@router.post("/ai-articles",
-            summary="AI 기사 일괄 생성",
-            description="여러 이슈 ID에 해당하는 콘텐츠를 배치로 생성합니다.",
-            response_model=GenerationStatusResponse,
-            status_code=status.HTTP_202_ACCEPTED)
+
+@router.post(
+    "/ai-articles",
+    summary="AI 기사 일괄 생성",
+    description="여러 이슈 ID에 해당하는 콘텐츠를 배치로 생성합니다.",
+    response_model=GenerationStatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        409: {"description": "해당 이슈에 대한 중복 요청"}
+    }
+)
 async def create_batch_ai_articles(
     request: AiArticleBatchGenerationRequest,
     background_tasks: BackgroundTasks,
