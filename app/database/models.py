@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, BigInteger, DateTime, Boolean
+import enum
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, BigInteger, DateTime, Enum as SqlEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
@@ -46,14 +47,21 @@ class RawArticle(Base):
     category = relationship("Category")
     issue = relationship("Issue", back_populates="articles")
 
+class ProcessingStatusEnum(enum.Enum):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
 class Issue(Base):
     __tablename__ = "issue"
     id = Column(BigInteger, primary_key=True)
     title = Column(String(255))
     category_id = Column(Integer, ForeignKey("category.id"))
     batch_time = Column(DateTime(timezone=True), nullable=False)
-    is_processed = Column(Boolean, default=False)
-    
+    processing_status = Column(SqlEnum(ProcessingStatusEnum), default=ProcessingStatusEnum.PENDING, nullable=False)
+
     category = relationship("Category")
     articles = relationship("RawArticle", back_populates="issue")
 
