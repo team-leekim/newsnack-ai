@@ -23,7 +23,7 @@ from .prompts import (
     create_google_image_prompt,
 )
 from app.core.config import settings
-from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack
+from app.database.models import Editor, Category, AiArticle, ReactionCount, Issue, RawArticle, TodayNewsnack, ProcessingStatusEnum
 from app.utils.image import upload_image_to_s3
 from app.utils.audio import convert_pcm_to_mp3, get_audio_duration_from_bytes, calculate_article_timelines, upload_audio_to_s3
 from app.engine.prompts import TTS_INSTRUCTIONS, create_tts_prompt
@@ -328,7 +328,7 @@ async def save_ai_article_node(state: AiArticleState):
     
     # 4. 상위 이슈 처리 상태 업데이트
     if issue:
-        issue.is_processed = True
+        issue.processing_status = ProcessingStatusEnum.COMPLETED
     
     db.commit()
     
@@ -348,7 +348,7 @@ async def select_hot_articles_node(state: TodayNewsnackState):
     hot_issues = (
         db.query(Issue.id)
         .join(RawArticle, Issue.id == RawArticle.issue_id)
-        .filter(Issue.is_processed == True)
+        .filter(Issue.processing_status == ProcessingStatusEnum.COMPLETED)
         .filter(Issue.batch_time >= time_limit)
         .group_by(Issue.id)
         .order_by(func.count(RawArticle.id).desc())
