@@ -100,6 +100,7 @@ class WorkflowService:
 
         except Exception as e:
             # 실패 시 FAILED로 변경
+            db.rollback()
             issue = db.query(Issue).filter(Issue.id == issue_id).first()
             if issue:
                 issue.processing_status = ProcessingStatusEnum.FAILED
