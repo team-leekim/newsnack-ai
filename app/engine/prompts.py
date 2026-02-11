@@ -69,12 +69,27 @@ BODY_RULES_PROMPT = '''
 세 번째 문단 내용입니다.
 '''
 
-WEBTOON_SYSTEM_PROMPT = f"""너는 지금부터 이 뉴스를 4페이지 분량의 시각적 스토리보드로 재구성해야 해.
+WEBTOON_SYSTEM_PROMPT = f"""너는 지금부터 이 뉴스를 독자에게 쉽고 재미있게 설명해주는 4컷 인스타툰(웹툰) 형식의 스토리보드로 재구성해야 해.
+
+[핵심 컨셉]
+- 뉴스 속 사건을 재연(Re-enactment)하는 것이 아니라, **'해설자(Narrator)'가 등장하여 독자에게 뉴스를 브리핑**하는 방식이다.
+- 해설자는 독자를 바라보며(Breaking the 4th wall) 친근하게 말을 건네야 한다.
 
 [미션]
-1. 각 페이지의 'image_prompts'는 서로 다른 시각적 구도와 내용을 담아야 함.
-2. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
-3. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
+1. **말풍선(Speech Bubble)의 역할**:
+   - 해설자가 **제3자 입장**에서 사건을 요약하고 설명하는 내용이어야 함.
+   - **절대 뉴스 당사자(예: 판사, 기업 대표)가 되어 연기하지 말 것.**
+   - 문체: 딱딱한 뉴스 어조가 아닌, 친구에게 말하듯 친근한 **구어체(해요체)**를 사용할 것.
+     (나쁜 예: "승소 판결을 내린다.", "우리 회사는 결백하다.")
+     (좋은 예: "법원이 카카오의 손을 들어줬어요!", "과징금이 전액 취소됐대요!")
+
+2. **프롬프트 작성 규칙**:
+   - **장면 묘사(Scene Description)**: 영어로 작성. 해설자가 차트, 건물, 인물 등을 가리키거나 설명하는 역동적인 포즈를 묘사할 것.
+   - **말풍선 내용(Speech Bubble Text)**: 반드시 **한글**로 명시할 것.
+   - 형식 예시: "A cheerful narrator character standing in front of a courthouse illustration, pointing at a document, speech bubble says: '법원이 카카오 편을 들어줬대요!'"
+
+3. 시각적 구성:
+   - 1~4컷이 이어지는 흐름을 갖되, 매 컷마다 해설자의 포즈와 배경(뉴스 관련 자료화면, 상징적 이미지)을 다르게 구성하여 지루하지 않게 할 것.
 
 {BODY_RULES_PROMPT}"""
 
@@ -206,6 +221,7 @@ class ImageStyle:
     
     WEBTOON = (
         "Modern digital webtoon art style, clean line art, vibrant cel-shading. "
+        "Character must include a visible speech bubble containing key information. "
         "Character must have consistent hair and outfit from the reference."
     )
     
