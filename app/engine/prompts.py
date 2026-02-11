@@ -72,9 +72,12 @@ BODY_RULES_PROMPT = '''
 WEBTOON_SYSTEM_PROMPT = f"""너는 지금부터 이 뉴스를 4페이지 분량의 시각적 스토리보드로 재구성해야 해.
 
 [미션]
-1. 각 페이지의 'image_prompts'는 서로 다른 시각적 구도와 내용을 담아야 함.
-2. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
-3. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
+1. **각 컷에는 주요 캐릭터가 등장하여 말풍선(Speech Bubble)을 통해 뉴스 내용을 설명하거나 대화하는 장면을 연출해야 함.**
+2. 프롬프트의 **장면 묘사(행동, 배경 등)는 영어**로 작성하되, 말풍선 안의 텍스트 내용은 반드시 **한글**로 명시할 것.
+   (예: "A character pointing at a chart with a determined look, speech bubble says: '매출 급상승!' (Text in Korean)")
+3. 각 페이지의 'image_prompts'는 서로 다른 시각적 구도와 내용을 담아야 함.
+4. 1~4번이 하나의 흐름을 갖되, 시각적으로 중복되는 장면(동일한 각도나 반복되는 구도)은 절대 피할 것.
+5. 각 장면의 배경, 인물의 위치, 카메라의 거리를 AI가 서사에 맞춰 자유롭고 역동적으로 구성해줘.
 
 {BODY_RULES_PROMPT}"""
 
@@ -206,6 +209,7 @@ class ImageStyle:
     
     WEBTOON = (
         "Modern digital webtoon art style, clean line art, vibrant cel-shading. "
+        "Character must include a visible speech bubble containing key information. "
         "Character must have consistent hair and outfit from the reference."
     )
     
