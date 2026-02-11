@@ -86,7 +86,7 @@ WEBTOON_SYSTEM_PROMPT = f"""너는 지금부터 이 뉴스를 독자에게 쉽�
 2. **프롬프트 작성 규칙**:
    - **장면 묘사(Scene Description)**: 영어로 작성. 해설자가 차트, 건물, 인물 등을 가리키거나 설명하는 역동적인 포즈를 묘사할 것.
    - **말풍선 내용(Speech Bubble Text)**: 반드시 **한글**로 명시할 것.
-   - 형식 예시: "A cheerful narrator character standing in front of a courthouse illustration, pointing at a document, speech bubble says: '법원이 카카오 편을 들어줬대요!' (Text in Korean)"
+   - 형식 예시: "A cheerful narrator character standing in front of a courthouse illustration, pointing at a document, speech bubble says: '법원이 카카오 편을 들어줬대요!'"
 
 3. 시각적 구성:
    - 1~4컷이 이어지는 흐름을 갖되, 매 컷마다 해설자의 포즈와 배경(뉴스 관련 자료화면, 상징적 이미지)을 다르게 구성하여 지루하지 않게 할 것.
