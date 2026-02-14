@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, status, HTTPException
-from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse
+from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse, TodayNewsnackRequest
 from app.services.workflow_service import workflow_service
 
 router = APIRouter(tags=["Content Generation"])
@@ -36,11 +36,14 @@ async def create_batch_ai_articles(
 
 @router.post("/today-newsnack",
             summary="오늘의 뉴스낵 생성",
-            description="오늘의 뉴스낵 콘텐츠를 생성하는 백그라운드 작업을 시작합니다.",
+            description="지정된 이슈 ID에 해당하는 AI 기사로 오늘의 뉴스낵 콘텐츠를 생성합니다.",
             response_model=GenerationStatusResponse,
             status_code=status.HTTP_202_ACCEPTED)
-async def create_today_newsnack(background_tasks: BackgroundTasks):
-    background_tasks.add_task(workflow_service.run_today_newsnack_pipeline)
+async def create_today_newsnack(
+    request: TodayNewsnackRequest,
+    background_tasks: BackgroundTasks
+):
+    background_tasks.add_task(workflow_service.run_today_newsnack_pipeline, request.issue_ids)
     
     return GenerationStatusResponse(
         status="accepted",

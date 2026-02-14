@@ -48,6 +48,7 @@ class EditorContentResponse(BaseModel):
 
 class TodayNewsnackState(TypedDict):
     db_session: Any
+    target_issue_ids: List[int]    # 요청받은 Issue ID 리스트
     selected_articles: List[dict]  # 선정된 5개 기사 정보
     briefing_segments: List[dict]  # 기사 ID별 생성된 대본
     total_audio_bytes: bytes       # 생성된 오디오 바이너리

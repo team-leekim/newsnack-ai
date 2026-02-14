@@ -110,12 +110,13 @@ class WorkflowService:
         finally:
             db.close()
 
-    async def run_today_newsnack_pipeline(self):
-        """오늘의 뉴스낵 생성 파이프라인 실행"""
+    async def run_today_newsnack_pipeline(self, issue_ids: List[int]):
+        """선택된 이슈들로부터 오늘의 뉴스낵 생성 파이프라인 실행"""
         db = SessionLocal()
         try:
             initial_state = {
                 "db_session": db,
+                "target_issue_ids": issue_ids,
                 "selected_articles": [],
                 "briefing_segments": [],
                 "total_audio_bytes": b"",
