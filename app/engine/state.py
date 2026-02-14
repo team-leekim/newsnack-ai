@@ -49,7 +49,7 @@ class EditorContentResponse(BaseModel):
 class TodayNewsnackState(TypedDict):
     db_session: Any
     target_issue_ids: List[int]    # 요청받은 Issue ID 리스트
-    selected_articles: List[dict]  # 선정된 5개 기사 정보
+    selected_articles: List[dict]  # 선정된 기사별 정보
     briefing_segments: List[dict]  # 기사 ID별 생성된 대본
     total_audio_bytes: bytes       # 생성된 오디오 바이너리
     audio_url: str                 # S3 업로드 후 URL
@@ -59,4 +59,4 @@ class BriefingSegment(BaseModel):
     script: str = Field(description="해당 기사에 대한 30초 내외의 아나운서 낭독 대본")
 
 class BriefingResponse(BaseModel):
-    segments: List[BriefingSegment] = Field(description="5개 기사에 대한 순차적 대본 리스트")
+    segments: List[BriefingSegment] = Field(description="입력된 기사들에 대한 순차적 대본 리스트")

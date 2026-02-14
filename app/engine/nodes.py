@@ -470,7 +470,7 @@ async def generate_openai_audio_task(full_script: str):
 async def generate_audio_node(state: TodayNewsnackState):
     """단일 오디오 생성 및 타임라인 계산 노드"""
     segments = state["briefing_segments"]
-    # 5개 기사 대본을 하나로 합침
+    # 모든 기사 대본을 하나로 합침
     full_script = " ".join([s["script"] for s in segments])
     
     try:
