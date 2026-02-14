@@ -6,7 +6,7 @@
 
 - 외부 파이프라인에서 API 호출로 AI 기사/브리핑 생성
 - 이슈별 AI 기사 생성(웹툰 또는 카드뉴스)
-- 오늘의 뉴스낵(Top 5 오디오 브리핑) 생성
+- 오늘의 뉴스낵(오디오 브리핑) 생성
 - 멀티 프로바이더 지원: Google, OpenAI 사용 가능
 
 ## 기술 스택
@@ -97,13 +97,13 @@ graph TD
 
 ### 오늘의 뉴스낵 브리핑 플로우
 
-> 화제성 높은 기사 5개를 선별해 하나의 오디오 브리핑으로 생성
+> 외부에서 선정된 이슈 ID들을 받아 오디오 브리핑으로 생성
 
 ```mermaid
 graph TD
-    Start[시작] --> Select[대상 기사 선정<br/>select_hot_articles_node]
-    Select --> |최근 처리된 이슈 중<br/>화제성 Top 5| Assemble[브리핑 대본 생성<br/>assemble_briefing_node]
-    Assemble --> |5개 기사 대본 병합| Audio[오디오 생성<br/>generate_audio_node]
+    Start[시작] --> Select[기사 조회<br/>fetch_daily_briefing_articles_node]
+    Select --> |요청된 이슈 ID 기반 조회| Assemble[브리핑 대본 생성<br/>assemble_briefing_node]
+    Assemble --> |기사 대본 병합| Audio[오디오 생성<br/>generate_audio_node]
     Audio --> |TTS + 타임라인 계산| AudioStrategy{프로바이더}
     
     AudioStrategy --> |OpenAI| OpenAITTS[OpenAI TTS]
@@ -116,8 +116,8 @@ graph TD
 ```
 
 **주요 노드 설명:**
-- `select_hot_articles_node`: 최근 시간 윈도우 내 이슈 중 원본 기사 수가 많은 순으로 5개 선정 (부족 시 최신 AI 기사로 보충)
-- `assemble_briefing_node`: 5개 기사를 구조화된 대본으로 변환
+- `fetch_daily_briefing_articles_node`: 요청받은 Issue ID 리스트에 해당하는 AI 기사들을 조회 (ID 순 정렬)
+- `assemble_briefing_node`: 조회된 기사들을 구조화된 대본으로 변환 (기사 개수 유동적)
 - `generate_audio_node`: 대본을 하나로 병합 후 TTS 생성, 오디오 길이 측정 및 타임라인 계산
 - `save_today_newsnack_node`: S3 업로드 및 today_newsnack 테이블 저장
 
