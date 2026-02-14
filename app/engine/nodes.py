@@ -336,55 +336,41 @@ async def save_ai_article_node(state: AiArticleState):
     return state
 
 
-async def select_hot_articles_node(state: TodayNewsnackState):
-    """대상 기사 선정 노드"""
+async def fetch_daily_briefing_articles_node(state: TodayNewsnackState):
+    """지정된 이슈 ID에 해당하는 기사 조회 노드"""
     db: Session = state["db_session"]
+    target_ids = state["target_issue_ids"]
     selected_articles = []
-    selected_issue_ids = set()
 
-    # 최근 이슈 중에서 화제성 판단
-    time_limit = datetime.now() - timedelta(hours=settings.TODAY_NEWSNACK_ISSUE_TIME_WINDOW_HOURS)
-    
-    hot_issues = (
-        db.query(Issue.id)
-        .join(RawArticle, Issue.id == RawArticle.issue_id)
-        .filter(Issue.processing_status == ProcessingStatusEnum.COMPLETED)
-        .filter(Issue.batch_time >= time_limit)
-        .group_by(Issue.id)
-        .order_by(func.count(RawArticle.id).desc())
-        .limit(5)
+    if not target_ids:
+        logger.warning("[TodayNewsnack] No target issue IDs provided.")
+        return {"selected_articles": []}
+
+    articles = (
+        db.query(AiArticle)
+        .filter(AiArticle.issue_id.in_(target_ids))
+        .order_by(AiArticle.id.asc())
         .all()
     )
 
-    # 선정된 이슈의 AI 기사 가져오기
-    for (issue_id,) in hot_issues:
-        article = db.query(AiArticle).filter(AiArticle.issue_id == issue_id).first()
-        if article:
-            selected_articles.append(article)
-            selected_issue_ids.add(issue_id)
-
-    # 5개 미만이면, 최신 생성된 AI 기사로 채움
-    if len(selected_articles) < 5:
-        remaining = 5 - len(selected_articles)
-        
-        fallback_query = db.query(AiArticle).order_by(AiArticle.published_at.desc())
-        
-        if selected_issue_ids:
-            fallback_query = fallback_query.filter(AiArticle.issue_id.notin_(selected_issue_ids))
-            
-        fallbacks = fallback_query.limit(remaining).all()
-        selected_articles.extend(fallbacks)
+    # 요청된 순서대로 정렬 (없으면 스킵)
+    article_map = {a.issue_id: a for a in articles}
     
-    logger.info(f"[TodayNewsnack] Selected {len(selected_articles)} articles for briefing.")
+    for issue_id in target_ids:
+        if issue_id in article_map:
+            a = article_map[issue_id]
+            selected_articles.append({
+                "id": a.id,
+                "title": a.title,
+                "body": a.body,
+                "thumbnail_url": a.thumbnail_url
+            })
+        else:
+            logger.warning(f"[TodayNewsnack] Targeted AiArticle for Issue {issue_id} not found.")
 
-    return {"selected_articles": [
-        {
-            "id": a.id,
-            "title": a.title,
-            "body": a.body,
-            "thumbnail_url": a.thumbnail_url
-        } for a in selected_articles
-    ]}
+    logger.info(f"[TodayNewsnack] Fetched {len(selected_articles)} articles for briefing.")
+
+    return {"selected_articles": selected_articles}
 
 
 async def assemble_briefing_node(state: TodayNewsnackState):
@@ -485,7 +471,7 @@ async def generate_openai_audio_task(full_script: str):
 async def generate_audio_node(state: TodayNewsnackState):
     """단일 오디오 생성 및 타임라인 계산 노드"""
     segments = state["briefing_segments"]
-    # 5개 기사 대본을 하나로 합침
+    # 모든 기사 대본을 하나로 합침
     full_script = " ".join([s["script"] for s in segments])
     
     try:

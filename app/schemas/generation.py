@@ -7,3 +7,6 @@ class GenerationStatusResponse(BaseModel):
 
 class AiArticleBatchGenerationRequest(BaseModel):
     issue_ids: List[int]
+
+class TodayNewsnackRequest(BaseModel):
+    issue_ids: List[int]
