@@ -349,6 +349,7 @@ async def fetch_daily_briefing_articles_node(state: TodayNewsnackState):
     articles = (
         db.query(AiArticle)
         .filter(AiArticle.issue_id.in_(target_ids))
+        .order_by(AiArticle.id.asc())
         .all()
     )
 
