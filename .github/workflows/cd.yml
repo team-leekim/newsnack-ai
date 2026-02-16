@@ -88,6 +88,8 @@ jobs:
             # 4. 새 컨테이너 실행
             docker run -d --name $CONTAINER_NAME \
               -p 8000:8000 \
+              --memory-reservation="500m" \
+              --memory="1g" \
               --restart always \
               -e API_KEY="${{ secrets.API_KEY }}" \
               -e AI_PROVIDER="${{ secrets.AI_PROVIDER }}" \
