@@ -17,6 +17,7 @@ env:
   AWS_REGION: ap-northeast-2
   ECR_REPOSITORY: newsnack-ai
   CONTAINER_NAME: newsnack-ai
+  DOCKER_NETWORK_NAME: newsnack-pipeline_default
 
 jobs:
   build-and-push:
@@ -73,7 +74,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE_URI, ECR_REGISTRY, CONTAINER_NAME, AWS_REGION
+          envs: IMAGE_URI, ECR_REGISTRY, CONTAINER_NAME, AWS_REGION, DOCKER_NETWORK_NAME
           script: |
             # 1. ECR 로그인
             aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
@@ -90,6 +91,7 @@ jobs:
             # 4. 새 컨테이너 실행
             docker run -d --name $CONTAINER_NAME \
               -p 8000:8000 \
+              --network $DOCKER_NETWORK_NAME \
               --memory-reservation="300m" \
               --memory="800m" \
               --restart always \
