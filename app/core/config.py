@@ -3,7 +3,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "newsnack AI Server"
+    PROJECT_NAME: str = "Newsnack AI Server"
     
     # AI Provider
     AI_PROVIDER: Literal["google", "openai"] = "google"
