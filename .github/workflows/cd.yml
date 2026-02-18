@@ -17,7 +17,7 @@ env:
   AWS_REGION: ap-northeast-2
   ECR_REPOSITORY: newsnack-ai
   CONTAINER_NAME: newsnack-ai
-  DOCKER_NETWORK_NAME: newsnack-pipeline_default
+  DOCKER_NETWORK_NAME: newsnack-internal
 
 jobs:
   build-and-push:
