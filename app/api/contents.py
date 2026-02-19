@@ -12,26 +12,26 @@ router = APIRouter(tags=["Content Generation"])
     response_model=GenerationStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
     responses={
-        409: {"description": "중복 요청된 이슈가 존재하는 경우"}
+        409: {"description": "처리 가능한 이슈가 없는 경우"}
     }
 )
 async def create_batch_ai_articles(
     request: AiArticleBatchGenerationRequest,
     background_tasks: BackgroundTasks,
 ):
-    non_pending = workflow_service.check_duplicate_issues(request.issue_ids)
+    occupied_ids = workflow_service.occupy_issues(request.issue_ids)
 
-    if non_pending:
+    if not occupied_ids:
         raise HTTPException(
             status_code=409,
-            detail=f"중복 요청된 이슈가 존재합니다. issue_id:{non_pending}"
+            detail="처리 가능한 이슈가 없습니다."
         )
 
-    background_tasks.add_task(workflow_service.run_batch_ai_articles_pipeline, request.issue_ids)
+    background_tasks.add_task(workflow_service.run_batch_ai_articles_pipeline, occupied_ids)
 
     return GenerationStatusResponse(
         status="accepted",
-        message="콘텐츠 생성 작업이 백그라운드에서 시작되었습니다.",
+        message=f"총 {len(request.issue_ids)}개 요청 중 {len(occupied_ids)}개의 콘텐츠 생성이 시작되었습니다.",
     )
 
 @router.post("/today-newsnack",

@@ -17,17 +17,36 @@ class WorkflowService:
         self.newsnack_graph = create_today_newsnack_graph()
         self.semaphore = asyncio.Semaphore(settings.AI_ARTICLE_MAX_CONCURRENT_GENERATIONS)
 
-    def check_duplicate_issues(self, issue_ids: List[int]) -> List[int]:
+    def occupy_issues(self, issue_ids: List[int]) -> List[int]:
         """
-        중복으로 생성 요청된 이슈(IN_PROGRESS, COMPLETED)의 ID 리스트 반환
+        주어진 이슈들 중 처리 가능한(PENDING, FAILED) 이슈를 찾아
+        상태를 IN_PROGRESS로 변경하고, 변경된 이슈 ID 리스트를 반환함.
         """
         db: Session = SessionLocal()
         try:
-            issues = db.query(Issue).filter(Issue.id.in_(issue_ids)).all()
-            return [
-                issue.id for issue in issues 
-                if issue.processing_status in [ProcessingStatusEnum.IN_PROGRESS, ProcessingStatusEnum.COMPLETED]
-            ]
+            # 락을 걸고 조회
+            issues = db.query(Issue).filter(
+                Issue.id.in_(issue_ids),
+                Issue.processing_status.in_([
+                    ProcessingStatusEnum.PENDING,
+                    ProcessingStatusEnum.FAILED,
+                ])
+            ).with_for_update().all()
+            
+            if not issues:
+                return []
+                
+            occupied_ids = []
+            for issue in issues:
+                issue.processing_status = ProcessingStatusEnum.IN_PROGRESS
+                occupied_ids.append(issue.id)
+            
+            db.commit()
+            return occupied_ids
+        except Exception as e:
+            db.rollback()
+            logger.error(f"[Workflow] Error occupying issues: {e}")
+            raise e
         finally:
             db.close()
 
@@ -63,10 +82,6 @@ class WorkflowService:
             if not raw_articles:
                 logger.error(f"No articles found for Issue ID {issue_id}")
                 return
-
-            # 상태 IN_PROGRESS로 변경
-            issue.processing_status = ProcessingStatusEnum.IN_PROGRESS
-            db.commit()
 
             # 2. 본문 통합 (프롬프트 입력용)
             merged_content = "\n\n---\n\n".join([
