@@ -31,7 +31,7 @@ class WorkflowService:
                     ProcessingStatusEnum.PENDING,
                     ProcessingStatusEnum.FAILED,
                 ])
-            ).with_for_update().all()
+            ).with_for_update(skip_locked=True).all()
             
             if not issues:
                 return []
