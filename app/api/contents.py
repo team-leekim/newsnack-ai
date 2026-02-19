@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, status, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse, TodayNewsnackRequest
 from app.services.workflow_service import workflow_service
 
@@ -19,7 +20,7 @@ async def create_batch_ai_articles(
     request: AiArticleBatchGenerationRequest,
     background_tasks: BackgroundTasks,
 ):
-    occupied_ids = workflow_service.occupy_issues(request.issue_ids)
+    occupied_ids = await run_in_threadpool(workflow_service.occupy_issues, request.issue_ids)
 
     if not occupied_ids:
         raise HTTPException(
