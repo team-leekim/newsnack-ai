@@ -12,7 +12,7 @@ router = APIRouter(tags=["Content Generation"])
     response_model=GenerationStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
     responses={
-        409: {"description": "해당 이슈에 대한 중복 요청"}
+        409: {"description": "중복 요청된 이슈가 존재하는 경우"}
     }
 )
 async def create_batch_ai_articles(
@@ -24,7 +24,7 @@ async def create_batch_ai_articles(
     if non_pending:
         raise HTTPException(
             status_code=409,
-            detail=f"처리중 또는 완료된 이슈입니다. issue_id:{non_pending}"
+            detail=f"중복 요청된 이슈가 존재합니다. issue_id:{non_pending}"
         )
 
     background_tasks.add_task(workflow_service.run_batch_ai_articles_pipeline, request.issue_ids)

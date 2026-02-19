@@ -19,12 +19,15 @@ class WorkflowService:
 
     def check_duplicate_issues(self, issue_ids: List[int]) -> List[int]:
         """
-        PENDING이 아닌 이슈 ID 리스트 반환
+        중복으로 생성 요청된 이슈(IN_PROGRESS, COMPLETED)의 ID 리스트 반환
         """
         db: Session = SessionLocal()
         try:
             issues = db.query(Issue).filter(Issue.id.in_(issue_ids)).all()
-            return [issue.id for issue in issues if issue.processing_status != ProcessingStatusEnum.PENDING]
+            return [
+                issue.id for issue in issues 
+                if issue.processing_status in [ProcessingStatusEnum.IN_PROGRESS, ProcessingStatusEnum.COMPLETED]
+            ]
         finally:
             db.close()
 
