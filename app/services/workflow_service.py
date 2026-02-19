@@ -80,8 +80,7 @@ class WorkflowService:
 
             raw_articles = issue.articles
             if not raw_articles:
-                logger.error(f"No articles found for Issue ID {issue_id}")
-                return
+                raise ValueError(f"No articles found for Issue ID {issue_id}")
 
             # 2. 본문 통합 (프롬프트 입력용)
             merged_content = "\n\n---\n\n".join([
