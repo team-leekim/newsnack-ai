@@ -4,13 +4,11 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-      - '.github/ISSUE_TEMPLATE/**'
-      - 'docs/**'
+    paths:
+      - 'app/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - '.github/workflows/cd.yml'
   workflow_dispatch:
 
 env:
