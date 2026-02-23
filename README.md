@@ -65,13 +65,8 @@ sequenceDiagram
 graph TD
     Start[시작] --> Analyze[뉴스 분석<br/>analyze_article_node]
     Analyze --> |제목/요약/타입 결정| SelectEditor[에디터 선정<br/>select_editor_node]
-    SelectEditor --> |카테고리 매칭 or 랜덤| Branch{콘텐츠 타입}
-    
-    Branch --> |WEBTOON| Webtoon[웹툰 본문 생성<br/>webtoon_creator_node]
-    Branch --> |CARD_NEWS| CardNews[카드뉴스 본문 생성<br/>card_news_creator_node]
-    
-    Webtoon --> |본문 + 이미지 프롬프트 4개| ImageGen[이미지 생성<br/>image_gen_node]
-    CardNews --> |본문 + 이미지 프롬프트 4개| ImageGen
+    SelectEditor --> |카테고리 매칭 or 랜덤| ContentCreator[본문 생성<br/>content_creator_node]
+    ContentCreator --> |본문 + 이미지 프롬프트 4개| ImageGen[이미지 생성<br/>image_gen_node]
     
     ImageGen --> |병렬 생성 전략| ImageStrategy{프로바이더}
     ImageStrategy --> |OpenAI| OpenAI[4장 전면 병렬 생성]
@@ -88,14 +83,14 @@ graph TD
 **주요 노드 설명:**
 - `analyze_article_node`: 원본 기사 분석, 제목/요약 생성, 콘텐츠 타입(웹툰/카드뉴스) 결정
 - `select_editor_node`: 이슈의 카테고리와 일치하는 에디터 배정 (없으면 랜덤)
-- `webtoon_creator_node` / `card_news_creator_node`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성
+- `content_creator_node`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성 (콘텐츠 타입에 따라 웹툰/카드뉴스 스타일 내부 분기)
 - `image_gen_node`: 프로바이더별 이미지 생성 전략 실행
   - OpenAI: 4장 전면 병렬 생성
   - Google (참조 O): 1장 기준 이미지 생성 후 나머지 3장을 참조해 병렬 생성
   - Google (참조 X): 4장 전면 병렬 생성
 - `save_ai_article_node`: ai_article 테이블 저장, reaction_count 초기화, 이슈 처리 상태 업데이트
 
-### 오늘의 뉴스낵 브리핑 플로우
+### 오늘의 뉴스낵 생성 플로우
 
 > 외부에서 선정된 이슈 ID들을 받아 오디오 브리핑으로 생성
 
