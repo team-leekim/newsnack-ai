@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     API_KEY: str
     GOOGLE_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    LOGO_DEV_SECRET_KEY: Optional[str] = None
+    TAVILY_API_KEY: Optional[str] = None
     
     # Database & Storage
     DB_URL: str
@@ -45,6 +47,9 @@ class Settings(BaseSettings):
             raise ValueError("AI_PROVIDER가 'google'일 때는 GOOGLE_API_KEY가 필수입니다.")
         if self.AI_PROVIDER == "openai" and not self.OPENAI_API_KEY:
             raise ValueError("AI_PROVIDER가 'openai'일 때는 OPENAI_API_KEY가 필수입니다.")
+        if self.AI_PROVIDER == "google" and self.GOOGLE_IMAGE_WITH_REFERENCE:
+            if not self.LOGO_DEV_SECRET_KEY or not self.TAVILY_API_KEY:
+                raise ValueError("GOOGLE_IMAGE_WITH_REFERENCE 설정 시 LOGO_DEV_SECRET_KEY와 TAVILY_API_KEY가 필수입니다.")
         return self
     
     model_config = SettingsConfigDict(

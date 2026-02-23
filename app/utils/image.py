@@ -3,6 +3,7 @@ import os
 import shutil
 from PIL import Image
 from typing import Optional
+import httpx
 
 from .s3 import s3_manager
 
@@ -33,3 +34,16 @@ def cleanup_local_reference_image_directory(content_key: str):
     directory_path = os.path.join("output", content_key)
     if os.path.exists(directory_path):
         shutil.rmtree(directory_path)
+
+
+async def download_image_from_url(url: str) -> Optional[Image.Image]:
+    """주어진 URL에서 이미지를 다운로드하여 PIL Image 반환"""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, follow_redirects=True)
+            if resp.status_code == 200:
+                return Image.open(io.BytesIO(resp.content)).convert("RGB")
+    except Exception as e:
+        # 실패 시 상위에서 처리하도록 None 반환
+        pass
+    return None
