@@ -19,6 +19,7 @@ class AiArticleState(TypedDict):
     content_type: str
     
     # 최종 결과
+    reference_image_url: Optional[str]
     final_title: str
     final_body: str
     image_prompts: List[str]

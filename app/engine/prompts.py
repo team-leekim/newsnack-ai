@@ -2,6 +2,24 @@ from langchain_core.prompts import ChatPromptTemplate
 
 
 # ============================================================================
+# 이미지 리서치 프롬프트
+# ============================================================================
+
+IMAGE_RESEARCH_SYSTEM_PROMPT = """You are an expert Image Research Agent.
+Your goal is to find ONE BEST reference image URL for the given news article.
+You have three tools:
+1. get_company_logo: Use this ONLY if the main entity is a company or brand.
+2. get_person_thumbnail: Use this ONLY if the main entity is a famous person.
+3. get_general_image: Use this ONLY if the entity is an abstract concept, event, or object.
+
+Read the title and summary of the article, decide the most central entity (Company, Person, or General), and use the appropriate tool to find an image.
+If the tool returns no useful image, try a fallback tool.
+
+CRITICAL: Your final answer MUST contain ONLY the raw image URL. Do not include any markdown, explanations, or quotes. Just the URL.
+If you absolutely cannot find any image after trying, reply exactly with: NONE
+"""
+
+# ============================================================================
 # 기사 분석 프롬프트
 # ============================================================================
 
@@ -259,7 +277,8 @@ def create_google_image_prompt(
     style: str,
     prompt: str,
     content_type: str,
-    with_reference: bool = False
+    with_reference: bool = False,
+    ref_type: str = "style"
 ) -> str:
     """Google Gemini 이미지 생성 전용 프롬프트
     
@@ -268,6 +287,7 @@ def create_google_image_prompt(
         prompt: 기본 프롬프트
         content_type: 콘텐츠 타입 (WEBTOON/CARD_NEWS)
         with_reference: 참조 이미지 사용 여부
+        ref_type: 참조 목적 ("style" = 앵커 이미지를 보고 화풍 유지, "content" = 대상을 보고 피사체로 참고)
     
     Returns:
         최종 프롬프트
@@ -284,9 +304,15 @@ def create_google_image_prompt(
     final_prompt = f"{style} {prompt}. {instruction}"
     
     if with_reference:
-        final_prompt += (
-            " Use the reference image ONLY to maintain character/style consistency. "
-            "IGNORE its composition and pose."
-        )
+        if ref_type == "style":
+            final_prompt += (
+                " Use the reference image ONLY to maintain character/style consistency. "
+                "IGNORE its composition and pose."
+            )
+        elif ref_type == "content":
+            final_prompt += (
+                " Use the reference image to accurately depict the main subject (e.g., specific logo, person's face). "
+                "Draw it in the requested art style."
+            )
     
     return final_prompt
