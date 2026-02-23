@@ -106,49 +106,38 @@ async def image_gen_node(state: AiArticleState):
     images = []
 
     try:
-        if settings.AI_PROVIDER == "openai":
-            logger.info(f"[ImageGen] Using OpenAI for {content_key}")
+        if settings.AI_PROVIDER == "google" and settings.GOOGLE_IMAGE_WITH_REFERENCE:
+            logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
+
+            anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
+            images.append(anchor_image)
+
             tasks = [
-                generate_openai_image_task(i, prompts[i], content_type)
-                for i in range(4)
+                generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image)
+                for i in range(1, 4)
             ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for i, result in enumerate(results, start=1):
+                if isinstance(result, Exception):
+                    raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
+                images.append(result)
+
+        else:
+            if settings.AI_PROVIDER == "openai":
+                logger.info(f"[ImageGen] Using OpenAI for {content_key}")
+                task_func = generate_openai_image_task
+            else:
+                logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
+                task_func = generate_google_image_task
+
+            tasks = [task_func(i, prompts[i], content_type) for i in range(4)]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
                 images.append(result)
-
-        else:
-            if settings.GOOGLE_IMAGE_WITH_REFERENCE:
-                logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
-
-                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
-                images.append(anchor_image)
-
-                tasks = [
-                    generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image)
-                    for i in range(1, 4)
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                for i, result in enumerate(results, start=1):
-                    if isinstance(result, Exception):
-                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
-                    images.append(result)
-
-            else:
-                logger.info(f"[ImageGen] Using Gemini (no reference) for {content_key}")
-                tasks = [
-                    generate_google_image_task(i, prompts[i], content_type)
-                    for i in range(4)
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                for i, result in enumerate(results):
-                    if isinstance(result, Exception):
-                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
-                    images.append(result)
 
         logger.info(f"[ImageGen] All 4 images generated successfully. Uploading to S3...")
         image_urls = []
