@@ -47,7 +47,7 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str) -
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=1, min=2, max=10)
 )
-async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None) -> Image.Image:
+async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style") -> Image.Image:
     """Gemini를 사용한 개별 이미지 생성 (재시도 포함, 메모리 기반 참조)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
@@ -57,7 +57,8 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
         style=style,
         prompt=prompt,
         content_type=content_type,
-        with_reference=with_reference
+        with_reference=with_reference,
+        ref_type=ref_type
     )
     contents = [final_prompt]
 
