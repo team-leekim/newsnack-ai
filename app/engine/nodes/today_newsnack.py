@@ -3,7 +3,8 @@ import logging
 from sqlalchemy.orm import Session
 
 from ..providers import ai_factory
-from ..state import TodayNewsnackState, BriefingResponse
+from ..state import TodayNewsnackState
+from ..schemas import BriefingResponse
 from ..prompts import create_briefing_template
 from ..tasks.audio import generate_openai_audio_task, generate_google_audio_task
 from app.core.config import settings
@@ -12,8 +13,8 @@ from app.utils.audio import get_audio_duration_from_bytes, calculate_article_tim
 
 logger = logging.getLogger(__name__)
 
-llm = ai_factory.get_llm()
-briefing_llm = llm.with_structured_output(BriefingResponse)
+chat_model = ai_factory.get_chat_model()
+briefing_llm = chat_model.with_structured_output(BriefingResponse)
 
 
 async def fetch_daily_briefing_articles_node(state: TodayNewsnackState):

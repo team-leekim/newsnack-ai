@@ -5,7 +5,8 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 
 from ..providers import ai_factory
-from ..state import AiArticleState, AnalysisResponse, EditorContentResponse
+from ..state import AiArticleState
+from ..schemas import AnalysisResponse, EditorContentResponse
 from ..prompts import (
     ARTICLE_ANALYSIS_TEMPLATE,
     create_webtoon_template,
@@ -18,9 +19,9 @@ from app.utils.image import upload_image_to_s3
 
 logger = logging.getLogger(__name__)
 
-llm = ai_factory.get_llm()
-analyze_llm = llm.with_structured_output(AnalysisResponse)
-editor_llm = llm.with_structured_output(EditorContentResponse)
+chat_model = ai_factory.get_chat_model()
+analyze_llm = chat_model.with_structured_output(AnalysisResponse)
+editor_llm = chat_model.with_structured_output(EditorContentResponse)
 
 
 async def analyze_article_node(state: AiArticleState):
