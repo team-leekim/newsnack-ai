@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Optional, Literal, Any
+from typing import TypedDict, List, Optional, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -47,12 +47,11 @@ class EditorContentResponse(BaseModel):
 )
 
 class TodayNewsnackState(TypedDict):
-    db_session: Any
+    db_session: Session
     target_issue_ids: List[int]    # 요청받은 Issue ID 리스트
     selected_articles: List[dict]  # 선정된 기사별 정보
     briefing_segments: List[dict]  # 기사 ID별 생성된 대본
     total_audio_bytes: bytes       # 생성된 오디오 바이너리
-    audio_url: str                 # S3 업로드 후 URL
     briefing_articles_data: List[dict] # 최종 DB 저장용 타임라인 포함 데이터
 
 class BriefingSegment(BaseModel):
