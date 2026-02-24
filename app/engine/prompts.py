@@ -31,7 +31,8 @@ You have three tools:
 
 4. If using get_fallback_image:
    - DANGER: Kakao image search uses strict AND logic. Long queries will fail and return 0 results.
-   - Compose an EXTREMELY SHORT, 1~2 word query focusing ONLY on the core noun (e.g., "[Person Name]", "[Brand Name] 로고").
+   - Compose an EXTREMELY SHORT, 1~2 word query focusing ONLY on the core noun.
+   - CRITICAL LANGUAGE RULE: You MUST use the exact original term as written in the article text (Korean if written in Korean). Do NOT translate Korean names/brands into English before searching, as this ruins local search accuracy.
    - Review the returned candidates list [{image_url, display_sitename, doc_url}, ...].
    - Choose the image_url from the most reliable source (news media, official blogs) that best matches the article.
 
