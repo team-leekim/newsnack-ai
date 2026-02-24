@@ -59,45 +59,62 @@ async def get_person_thumbnail(person_name: str) -> str:
     유명 인물이나 고유 명사의 위키백과 공식 프로필 사진(썸네일) URL을 가져옵니다.
     뉴스 기사에 등장하는 주요 인물(정치인, 연예인, 운동선수 등) 검색 시 가장 적합합니다.
     이름은 기사에 표기된 그대로 전달하세요. 번역하거나 로마자로 변환하지 마세요.
+    반환된 JSON 목록 [{title, description, thumbnail_url}]을 확인하고 기사 문맥에 맞는 인물을 골라 최종 URL을 선택하세요.
     """
     headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
 
     async with httpx.AsyncClient() as client:
         try:
-            # 1단계: Wikipedia 검색 API로 정확한 페이지 제목 탐색 (한/영 이름 모두 처리)
+            # 1단계: Wikipedia 검색 API로 상위 5개 페이지 제목 및 설명 탐색
             search_resp = await client.get(
                 "https://ko.wikipedia.org/w/api.php",
-                params={"action": "query", "list": "search", "srsearch": person_name, "srlimit": 1, "format": "json"},
+                params={
+                    "action": "query", "list": "search", 
+                    "srsearch": person_name, "srlimit": 5, 
+                    "srprop": "snippet", "format": "json"
+                },
                 headers=headers
             )
             if search_resp.status_code != 200:
                 logger.warning(f"[get_person_thumbnail] Search API failed for: {person_name} (status: {search_resp.status_code})")
-                return "TOOL_FAILED: No Wikipedia thumbnail found. Consider trying get_general_image instead."
+                return "TOOL_FAILED: No Wikipedia page found. MUST try get_general_image."
 
             results = search_resp.json().get("query", {}).get("search", [])
             if not results:
                 logger.warning(f"[get_person_thumbnail] No search results for: {person_name}")
-                return "TOOL_FAILED: No Wikipedia thumbnail found. Consider trying get_general_image instead."
+                return "TOOL_FAILED: No Wikipedia page found. MUST try get_general_image."
 
-            found_title = results[0]["title"]
-            logger.info(f"[get_person_thumbnail] Found page title: '{found_title}' for query: '{person_name}'")
+            # 2단계: 각 검색 결과의 summary 조회 → 썸네일 추출
+            candidates = []
+            for res in results:
+                title = res["title"]
+                snippet = res.get("snippet", "")
+                
+                summary_resp = await client.get(
+                    f"https://ko.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(title)}",
+                    headers=headers,
+                    follow_redirects=True
+                )
+                
+                if summary_resp.status_code == 200:
+                    data = summary_resp.json()
+                    if "thumbnail" in data:
+                        candidates.append({
+                            "title": title,
+                            "description": snippet,
+                            "thumbnail_url": data["thumbnail"]["source"]
+                        })
 
-            # 2단계: 정확한 제목으로 summary 조회 → thumbnail 추출
-            summary_resp = await client.get(
-                f"https://ko.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(found_title)}",
-                headers=headers,
-                follow_redirects=True
-            )
-            if summary_resp.status_code == 200:
-                data = summary_resp.json()
-                if "thumbnail" in data:
-                    return data["thumbnail"]["source"]
+            if not candidates:
+                logger.warning(f"[get_person_thumbnail] No thumbnails found in any search results for: {person_name}")
+                return "TOOL_FAILED: No Wikipedia thumbnails found for any candidates. MUST try get_general_image."
 
-            logger.warning(f"[get_person_thumbnail] No thumbnail in summary for: {found_title}")
-            return "TOOL_FAILED: No Wikipedia thumbnail found. Consider trying get_general_image instead."
+            logger.info(f"[get_person_thumbnail] Found {len(candidates)} candidates for query: '{person_name}'")
+            return json.dumps(candidates, ensure_ascii=False)
+            
         except Exception as e:
             logger.error(f"[get_person_thumbnail] API fetch failed: {e}")
-            return f"TOOL_FAILED: Error occurred - {e}. Try a different tool."
+            return f"TOOL_FAILED: Error occurred - {e}. MUST try get_general_image."
 
 
 @tool("get_general_image")
