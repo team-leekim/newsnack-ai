@@ -31,7 +31,10 @@ You have three tools:
 
 4. If using get_fallback_image:
    - DANGER: Kakao image search uses strict AND logic. Long queries will fail and return 0 results.
-   - Compose an EXTREMELY SHORT, 1~2 word query focusing ONLY on the core noun.
+   - Compose a 2~3 word query combining the core entity with a static category identifier. NEVER use action words, verbs, or event descriptions like "투자(invest)", "수상(win)", "포기", etc.
+   - For a PERSON: "[Name] [Role]" or "[Name]" (e.g., "홍길동 대표", "홍길동").
+   - For a COMPANY/ORGANIZATION: "[Brand/Company] 로고" (e.g., "삼성 로고").
+   - For a PRODUCT/ARTWORK/MOVIE: "[Name] 포스터" or "[Name] 제품" (e.g., "아바타3 포스터").
    - CRITICAL LANGUAGE RULE: You MUST use the exact original term as written in the article text (Korean if written in Korean). Do NOT translate Korean names/brands into English before searching, as this ruins local search accuracy.
    - Review the returned candidates list [{image_url, display_sitename, doc_url}, ...].
    - Choose the image_url from the most reliable source (news media, official blogs) that best matches the article.
@@ -46,7 +49,7 @@ You have three tools:
 """
 
 # ============================================================================
-# 이미지 검증 에이전트 프롬프트
+# 이미지 검증 프롬프트
 # ============================================================================
 
 IMAGE_VALIDATOR_SYSTEM_PROMPT = """You are an expert Image QA Validator.
