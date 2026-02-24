@@ -1,11 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate
 
-
 # ============================================================================
-# 이미지 리서치 프롬프트
+# 이미지 리서치 에이전트 프롬프트
 # ============================================================================
 
-IMAGE_RESEARCH_SYSTEM_PROMPT = """You are an expert Image Research Agent.
+IMAGE_RESEARCHER_SYSTEM_PROMPT = """You are an expert Image Research Agent.
 Your goal is to find ONE BEST reference image URL for the given news article.
 You have three tools:
 1. get_company_logo: Search for a company's logo. Pass the OFFICIAL ENGLISH name. Returns a JSON list of candidates, each with a pre-built {name, domain, logo_url}.
@@ -31,7 +30,8 @@ You have three tools:
    - If NO candidate perfectly matches, OR if get_person_thumbnail returns "TOOL_FAILED" → you MUST fall back to get_fallback_image. Do NOT give up.
 
 4. If using get_fallback_image:
-   - Compose a highly specific query by combining the name with their job, organization, or context (e.g., "[Group or Job] [Person Name] profile", "[Brand Name] official logo").
+   - DANGER: Kakao image search uses strict AND logic. Long queries will fail and return 0 results.
+   - Compose an EXTREMELY SHORT, 1~2 word query focusing ONLY on the core noun (e.g., "[Person Name]", "[Brand Name] 로고").
    - Review the returned candidates list [{image_url, display_sitename, doc_url}, ...].
    - Choose the image_url from the most reliable source (news media, official blogs) that best matches the article.
 

@@ -5,7 +5,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
 from app.engine.nodes.ai_article import analyze_article_node
-from app.engine.nodes.image_research import image_research_agent_node
+from app.engine.nodes.image_researcher import image_researcher_node
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category, ProcessingStatusEnum
@@ -157,7 +157,7 @@ class WorkflowService:
             state = await analyze_article_node(state)
 
             # 이미지 리서치 에이전트 실행
-            research_result = await image_research_agent_node(state)
+            research_result = await image_researcher_node(state)
             state.update(research_result)
 
             return {

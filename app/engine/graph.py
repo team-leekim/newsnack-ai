@@ -10,7 +10,8 @@ from .nodes import (
     assemble_briefing_node,
     generate_audio_node,
     save_today_newsnack_node,
-    image_research_agent_node,
+    image_researcher_node,
+    image_validator_node,
 )
 from app.core.config import settings
 
@@ -20,7 +21,8 @@ def create_ai_article_graph():
 
     # 1. 노드 등록
     workflow.add_node("analyze_article", analyze_article_node)
-    workflow.add_node("image_research", image_research_agent_node)
+    workflow.add_node("image_researcher", image_researcher_node)
+    workflow.add_node("image_validator", image_validator_node)
     workflow.add_node("select_editor", select_editor_node)
     workflow.add_node("content_creator", content_creator_node)
     workflow.add_node("image_gen", image_gen_node)
@@ -38,9 +40,10 @@ def create_ai_article_graph():
     workflow.add_conditional_edges(
         "analyze_article",
         check_research_condition,
-        {"do_research": "image_research", "skip_research": "select_editor"}
+        {"do_research": "image_researcher", "skip_research": "select_editor"}
     )
-    workflow.add_edge("image_research", "select_editor")
+    workflow.add_edge("image_researcher", "image_validator")
+    workflow.add_edge("image_validator", "select_editor")
     workflow.add_edge("select_editor", "content_creator")
     workflow.add_edge("content_creator", "image_gen")
     workflow.add_edge("image_gen", "save_ai_article")
