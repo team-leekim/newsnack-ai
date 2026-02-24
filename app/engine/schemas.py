@@ -25,3 +25,8 @@ class BriefingSegment(BaseModel):
 
 class BriefingResponse(BaseModel):
     segments: List[BriefingSegment] = Field(description="입력된 기사들에 대한 순차적 대본 리스트")
+
+class ImageValidationResponse(BaseModel):
+    """이미지 적합성 검증 결과"""
+    reason: str = Field(description="해당 이미지가 기사 문맥에 적합한지 판단한 이유 (판단의 근거)")
+    is_valid: bool = Field(description="이미지가 조건을 충족하여 유효한지 여부 (유효하면 True, 거절 기준에 하나라도 해당되면 False)")

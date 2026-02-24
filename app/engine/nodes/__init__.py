@@ -11,7 +11,8 @@ from .today_newsnack import (
     generate_audio_node,
     save_today_newsnack_node,
 )
-from .image_research import image_research_agent_node
+from .image_researcher import image_researcher_node
+from .image_validator import image_validator_node
 
 __all__ = [
     "analyze_article_node",
@@ -23,5 +24,6 @@ __all__ = [
     "assemble_briefing_node",
     "generate_audio_node",
     "save_today_newsnack_node",
-    "image_research_agent_node",
+    "image_researcher_node",
+    "image_validator_node",
 ]
