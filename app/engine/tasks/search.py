@@ -103,10 +103,8 @@ async def get_person_thumbnail(person_name: str) -> str:
 @tool("get_general_image")
 async def get_general_image(query: str) -> List[str]:
     """
-    특정 기업의 로고나 위키백과 인물 사진이 아닌 일반적인 추상 개념, 사건, 사물 사진을 검색할 때 사용합니다.
-    (예: '자율주행 자동차', '태풍 피해 현장')
-    다른 툴에서 TOOL_FAILED를 반환한 경우 폴백으로도 사용합니다.
-    Tavily 검색 엔진을 통해 관련 이미지 URL 목록을 반환합니다.
+    다른 툴(get_company_logo, get_person_thumbnail)이 TOOL_FAILED를 반환했을 때만 사용하는 폴백 툴입니다.
+    아직 웹에서 해당 로고나 인물 사진을 찾을 수 있을 가능성이 있을 때 마지막 시도로 사용합니다.
     """
     tavily_search = TavilySearch(max_results=3, topic="general")
 
