@@ -36,21 +36,32 @@ async def image_research_agent_node(state: AiArticleState):
     
     try:
         response = await agent.ainvoke({"messages": [HumanMessage(content=context)]})
-        final_message = response["messages"][-1].content.strip()
-        
-        if final_message == "NONE":
-            final_url = None
-        else:
-            url_match = re.search(r'(https?://[^\s]+)', final_message)
+        messages = response["messages"]
+
+        # 디버그: 전체 메시지 타입 및 content 덤프
+        for i, msg in enumerate(messages):
+            content_preview = (msg.content or "")[:120].replace("\n", " ")
+            logger.debug(f"[ImageResearchAgent] msg[{i}] type={type(msg).__name__}, content='{content_preview}'")
+
+        # create_agent는 마지막 AIMessage가 빈 content를 가질 수 있으므로
+        # 메시지 전체를 역순 탐색하여 URL이 포함된 첫 번째 메시지를 찾음
+        final_url = None
+        for msg in reversed(messages):
+            content = msg.content if isinstance(msg.content, str) else ""
+            if content.strip() == "NONE":
+                final_url = None
+                break
+            url_match = re.search(r'(https?://[^\s]+)', content)
             if url_match:
                 final_url = url_match.group(1)
-            else:
-                final_url = None
-                logger.warning(f"[ImageResearchAgent] Could not parse URL from response: {final_message}")
+                break
+
+        if final_url is None:
+            logger.warning(f"[ImageResearchAgent] No URL found in any message after full traversal.")
 
         logger.info(f"[ImageResearchAgent] Chosen Reference URL: {final_url}")
         return {"reference_image_url": final_url}
-        
+
     except Exception as e:
         logger.error(f"[ImageResearchAgent] Agent execution failed: {e}")
         return {"reference_image_url": None}
