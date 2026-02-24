@@ -12,9 +12,8 @@ logger = logging.getLogger(__name__)
 
 tools = [get_company_logo, get_person_thumbnail, get_fallback_image]
 
-def _get_agent():
-    chat_model = ai_factory.get_chat_model()
-    return create_agent(chat_model, tools=tools, system_prompt=IMAGE_RESEARCHER_SYSTEM_PROMPT)
+chat_model = ai_factory.get_chat_model()
+research_agent = create_agent(chat_model, tools=tools, system_prompt=IMAGE_RESEARCHER_SYSTEM_PROMPT)
 
 async def image_researcher_node(state: AiArticleState):
     """
@@ -26,8 +25,6 @@ async def image_researcher_node(state: AiArticleState):
     
     logger.info(f"[ImageResearchAgent] Starting research for article: {title}")
     
-    agent = _get_agent()
-    
     context = (
         f"Title: {title}\n"
         f"Summary: {summary}\n"
@@ -35,7 +32,7 @@ async def image_researcher_node(state: AiArticleState):
     )
     
     try:
-        response = await agent.ainvoke({"messages": [HumanMessage(content=context)]})
+        response = await research_agent.ainvoke({"messages": [HumanMessage(content=context)]})
         messages = response["messages"]
 
         # 디버그: 전체 메시지 타입 및 content 덤프
