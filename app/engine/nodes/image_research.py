@@ -6,11 +6,11 @@ from langchain.agents import create_agent
 from ..providers import ai_factory
 from ..state import AiArticleState
 from ..prompts import IMAGE_RESEARCH_SYSTEM_PROMPT
-from ..tasks.search import get_company_logo, get_person_thumbnail, get_general_image
+from ..tasks.search import get_company_logo, get_person_thumbnail, get_fallback_image
 
 logger = logging.getLogger(__name__)
 
-tools = [get_company_logo, get_person_thumbnail, get_general_image]
+tools = [get_company_logo, get_person_thumbnail, get_fallback_image]
 
 def _get_agent():
     chat_model = ai_factory.get_chat_model()

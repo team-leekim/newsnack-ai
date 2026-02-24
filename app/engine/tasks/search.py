@@ -5,7 +5,6 @@ from typing import List
 
 import httpx
 from langchain_core.tools import tool
-from langchain_tavily import TavilySearch
 
 from app.core.config import settings
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 async def get_company_logo(company_name: str) -> str:
     """
     기업/브랜드의 로고 이미지 후보 목록을 검색합니다.
-    반드시 영어 공식 명칭으로 검색하세요 (예: 'Samsung Electronics', 'Hana Bank').
+    반드시 영어 공식 명칭으로 검색하세요.
     여러 후보의 로고 URL이 포함된 JSON 목록이 반환되며, 기사 문맥에 가장 부합하는
     항목의 logo_url을 최종 답변으로 선택해야 합니다.
     """
@@ -47,10 +46,10 @@ async def get_company_logo(company_name: str) -> str:
                         return json.dumps(candidates, ensure_ascii=False)
 
             logger.warning(f"[get_company_logo] No candidates found for: {company_name}")
-            return "TOOL_FAILED: No brand candidates found. Consider trying get_general_image with an English query instead."
+            return "TOOL_FAILED: No brand candidates found. MUST try get_fallback_image instead."
         except Exception as e:
             logger.error(f"[get_company_logo] API fetch failed: {e}")
-            return f"TOOL_FAILED: Error occurred - {e}. Try a different tool."
+            return f"TOOL_FAILED: Error occurred - {e}. MUST try get_fallback_image instead."
 
 
 @tool("get_person_thumbnail")
@@ -77,12 +76,12 @@ async def get_person_thumbnail(person_name: str) -> str:
             )
             if search_resp.status_code != 200:
                 logger.warning(f"[get_person_thumbnail] Search API failed for: {person_name} (status: {search_resp.status_code})")
-                return "TOOL_FAILED: No Wikipedia page found. MUST try get_general_image."
+                return "TOOL_FAILED: No Wikipedia page found. MUST try get_fallback_image."
 
             results = search_resp.json().get("query", {}).get("search", [])
             if not results:
                 logger.warning(f"[get_person_thumbnail] No search results for: {person_name}")
-                return "TOOL_FAILED: No Wikipedia page found. MUST try get_general_image."
+                return "TOOL_FAILED: No Wikipedia page found. MUST try get_fallback_image."
 
             # 2단계: 각 검색 결과의 summary 조회 → 썸네일 추출
             candidates = []
@@ -107,35 +106,61 @@ async def get_person_thumbnail(person_name: str) -> str:
 
             if not candidates:
                 logger.warning(f"[get_person_thumbnail] No thumbnails found in any search results for: {person_name}")
-                return "TOOL_FAILED: No Wikipedia thumbnails found for any candidates. MUST try get_general_image."
+                return "TOOL_FAILED: No Wikipedia thumbnails found for any candidates. MUST try get_fallback_image."
 
             logger.info(f"[get_person_thumbnail] Found {len(candidates)} candidates for query: '{person_name}'")
             return json.dumps(candidates, ensure_ascii=False)
             
         except Exception as e:
             logger.error(f"[get_person_thumbnail] API fetch failed: {e}")
-            return f"TOOL_FAILED: Error occurred - {e}. MUST try get_general_image."
+            return f"TOOL_FAILED: Error occurred - {e}. MUST try get_fallback_image."
 
 
-@tool("get_general_image")
-async def get_general_image(query: str) -> List[str]:
+@tool("get_fallback_image")
+async def get_fallback_image(query: str) -> str:
     """
-    다른 툴(get_company_logo, get_person_thumbnail)이 TOOL_FAILED를 반환했을 때만 사용하는 폴백 툴입니다.
-    아직 웹에서 해당 로고나 인물 사진을 찾을 수 있을 가능성이 있을 때 마지막 시도로 사용합니다.
+    다른 툴(get_company_logo, get_person_thumbnail)이 TOOL_FAILED를 반환했을 때 사용하는 최후의 폴백 도구입니다.
+    카카오 이미지 검색을 사용하여 국내 로컬 뉴스/기업/인물 이미지를 빠르고 정확하게 찾아냅니다.
+    
+    [중요 지침]
+    - query에 인물/기업의 단답형 이름만 넣지 마세요.
+    - 직업, 소속 등 문맥을 반드시 조합해서 구체적으로 검색하세요. (예: "[소속/직업] [인물명] 얼굴", "[브랜드명] 공식 로고 png")
+    - 반환된 JSON은 {image_url, display_sitename, doc_url} 구조를 갖습니다.
+    - display_sitename(출처)이 뉴스 매체이거나 신뢰성 있는 블로그인 경우를 우선하여 선택하세요.
     """
-    tavily_search = TavilySearch(max_results=3, topic="general")
+    if not settings.KAKAO_REST_API_KEY:
+        return "TOOL_FAILED: KAKAO_REST_API_KEY is not configured."
 
-    try:
-        result = await tavily_search.ainvoke({
-            "query": query,
-            "include_images": True
-        })
+    url = "https://dapi.kakao.com/v2/search/image"
+    headers = {"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"}
+    params = {"query": query, "size": 5}
 
-        images = result.get("images", [])
-        if not images:
-            logger.warning(f"[get_general_image] No images found for: {query}")
-            return ["TOOL_FAILED: No general images found for the given query."]
-        return images
-    except Exception as e:
-        logger.error(f"[get_general_image] Tavily fetch failed: {e}")
-        return [f"TOOL_FAILED: Error occurred - {e}."]
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                logger.warning(f"[get_fallback_image] Failed to fetch. Status: {response.status_code}")
+                return f"TOOL_FAILED: Kakao API returned status {response.status_code}"
+
+            data = response.json()
+            documents = data.get("documents", [])
+            
+            if not documents:
+                logger.warning(f"[get_fallback_image] No images found for: {query}")
+                return "TOOL_FAILED: No general images found for the given query."
+
+            candidates = [
+                {
+                    "display_sitename": doc.get("display_sitename", ""),
+                    "image_url": doc.get("image_url", ""),
+                    "doc_url": doc.get("doc_url", "")
+                }
+                for doc in documents
+            ]
+            
+            logger.info(f"[get_fallback_image] Found {len(candidates)} image candidates for: {query}")
+            return json.dumps(candidates, ensure_ascii=False)
+
+        except Exception as e:
+            logger.error(f"[get_fallback_image] Fetch failed: {e}")
+            return f"TOOL_FAILED: Error occurred - {e}."
