@@ -1,6 +1,7 @@
+import json
 import logging
 import urllib.parse
-from typing import Optional, List
+from typing import List
 
 import httpx
 from langchain_core.tools import tool
@@ -14,10 +15,11 @@ logger = logging.getLogger(__name__)
 @tool("get_company_logo")
 async def get_company_logo(company_name: str) -> str:
     """
-    특정 기업, 브랜드, 앱, 서비스의 고화질 공식 로고 이미지 URL을 검색합니다.
-    (예: '삼성전자', '스타벅스', 'Netflix')
+    기업/브랜드의 로고 이미지 후보 목록을 검색합니다.
+    반드시 영어 공식 명칭으로 검색하세요 (예: 'Samsung Electronics', 'Hana Bank').
+    여러 후보의 로고 URL이 포함된 JSON 목록이 반환되며, 기사 문맥에 가장 부합하는
+    항목의 logo_url을 최종 답변으로 선택해야 합니다.
     """
-    # Brand Search API를 사용하여 기업의 도메인을 찾습니다.
     search_url = f"https://api.logo.dev/search?q={urllib.parse.quote(company_name)}&strategy=match"
     headers = {"Authorization": f"Bearer {settings.LOGO_DEV_SECRET_KEY}"}
 
@@ -27,16 +29,28 @@ async def get_company_logo(company_name: str) -> str:
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list) and len(data) > 0:
-                    domain = data[0].get("domain")
-                    if domain:
-                        # 로고 이미지 URL 구성 (size=800, format=png, 마진 없음)
-                        # backend/server-side 호출이므로 URL에 token을 붙여서 바로 다운로드 가능하게 함
-                        return f"https://img.logo.dev/{domain}?token={settings.LOGO_DEV_SECRET_KEY}&size=800&format=png&fallback=404"
-            
-            return "No company logo found for the given name."
+                    # 각 후보에 로고 URL을 미리 구성하여 반환 (퍼블리셔블 키 사용)
+                    candidates = [
+                        {
+                            "name": item.get("name"),
+                            "domain": item.get("domain"),
+                            "logo_url": (
+                                f"https://img.logo.dev/{item.get('domain')}"
+                                f"?token={settings.LOGO_DEV_PUBLISHABLE_KEY}&size=800&format=png&fallback=404"
+                            )
+                        }
+                        for item in data[:5]
+                        if item.get("domain")
+                    ]
+                    if candidates:
+                        logger.info(f"[get_company_logo] Found {len(candidates)} candidates for: {company_name}")
+                        return json.dumps(candidates, ensure_ascii=False)
+
+            logger.warning(f"[get_company_logo] No candidates found for: {company_name}")
+            return "TOOL_FAILED: No brand candidates found. Consider trying get_general_image with an English query instead."
         except Exception as e:
             logger.error(f"[get_company_logo] API fetch failed: {e}")
-            return f"Error occurred while searching for company logo: {e}"
+            return f"TOOL_FAILED: Error occurred - {e}. Try a different tool."
 
 
 @tool("get_person_thumbnail")
@@ -44,20 +58,46 @@ async def get_person_thumbnail(person_name: str) -> str:
     """
     유명 인물이나 고유 명사의 위키백과 공식 프로필 사진(썸네일) URL을 가져옵니다.
     뉴스 기사에 등장하는 주요 인물(정치인, 연예인, 운동선수 등) 검색 시 가장 적합합니다.
+    한국어 이름도 영어 이름도 모두 입력 가능합니다.
     """
-    url = f"https://ko.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(person_name)}"
-    
+    headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
+
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url, follow_redirects=True)
-            if response.status_code == 200:
-                data = response.json()
+            # 1단계: Wikipedia 검색 API로 정확한 페이지 제목 탐색 (한/영 이름 모두 처리)
+            search_resp = await client.get(
+                "https://ko.wikipedia.org/w/api.php",
+                params={"action": "query", "list": "search", "srsearch": person_name, "srlimit": 1, "format": "json"},
+                headers=headers
+            )
+            if search_resp.status_code != 200:
+                logger.warning(f"[get_person_thumbnail] Search API failed for: {person_name} (status: {search_resp.status_code})")
+                return "TOOL_FAILED: No Wikipedia thumbnail found. Consider trying get_general_image instead."
+
+            results = search_resp.json().get("query", {}).get("search", [])
+            if not results:
+                logger.warning(f"[get_person_thumbnail] No search results for: {person_name}")
+                return "TOOL_FAILED: No Wikipedia thumbnail found. Consider trying get_general_image instead."
+
+            found_title = results[0]["title"]
+            logger.info(f"[get_person_thumbnail] Found page title: '{found_title}' for query: '{person_name}'")
+
+            # 2단계: 정확한 제목으로 summary 조회 → thumbnail 추출
+            summary_resp = await client.get(
+                f"https://ko.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(found_title)}",
+                headers=headers,
+                follow_redirects=True
+            )
+            if summary_resp.status_code == 200:
+                data = summary_resp.json()
                 if "thumbnail" in data:
                     return data["thumbnail"]["source"]
-            return "No Wikipedia thumbnail found for the given name."
+
+            logger.warning(f"[get_person_thumbnail] No thumbnail in summary for: {found_title}")
+            return "TOOL_FAILED: No Wikipedia thumbnail found. Consider trying get_general_image instead."
         except Exception as e:
             logger.error(f"[get_person_thumbnail] API fetch failed: {e}")
-            return f"Error occurred while searching for person thumbnail: {e}"
+            return f"TOOL_FAILED: Error occurred - {e}. Try a different tool."
 
 
 @tool("get_general_image")
@@ -65,22 +105,22 @@ async def get_general_image(query: str) -> List[str]:
     """
     특정 기업의 로고나 위키백과 인물 사진이 아닌 일반적인 추상 개념, 사건, 사물 사진을 검색할 때 사용합니다.
     (예: '자율주행 자동차', '태풍 피해 현장')
+    다른 툴에서 TOOL_FAILED를 반환한 경우 폴백으로도 사용합니다.
     Tavily 검색 엔진을 통해 관련 이미지 URL 목록을 반환합니다.
     """
-    # Tavily Search 래퍼 초기화 (이미지 포함 검색)
     tavily_search = TavilySearch(max_results=3, topic="general")
-    
+
     try:
-        # include_images 파라미터는 invoke로 동적 주입
         result = await tavily_search.ainvoke({
             "query": query,
             "include_images": True
         })
-        
+
         images = result.get("images", [])
         if not images:
-            return ["No general images found."]
+            logger.warning(f"[get_general_image] No images found for: {query}")
+            return ["TOOL_FAILED: No general images found for the given query."]
         return images
     except Exception as e:
         logger.error(f"[get_general_image] Tavily fetch failed: {e}")
-        return [f"Error occurred while searching for general image: {e}"]
+        return [f"TOOL_FAILED: Error occurred - {e}."]
