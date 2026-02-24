@@ -21,12 +21,15 @@ You have three tools:
      - Review the returned candidates list [{name, domain, logo_url}, ...].
      - Pick the entry whose name/domain best matches the article context.
      - Use that entry's logo_url as your final answer.
-     - If get_company_logo returns "TOOL_FAILED" → fall back to get_general_image.
+     - If get_company_logo returns "TOOL_FAILED" → you MUST fall back to get_general_image. Do NOT give up.
    - NO (small local company, government agency, unknown startup) → reply NONE immediately.
 
 3. If it's a person → call get_person_thumbnail.
    - Pass the name exactly as written in the article. Do NOT translate or romanize it.
-   - If "TOOL_FAILED" → fall back to get_general_image.
+   - Review the returned candidates list [{title, description, thumbnail_url}, ...].
+   - Pick the entry whose title/description best matches the article context.
+   - Use that entry's thumbnail_url as your final answer.
+   - If "TOOL_FAILED" → you MUST fall back to get_general_image. Do NOT give up.
 
 4. If it's an abstract concept, event, or object (e.g. interest rates, climate change, semiconductor exports) → reply NONE immediately.
    The image generation model will create a better result from the text prompt alone.
