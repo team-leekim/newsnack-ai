@@ -4,6 +4,8 @@ import logging
 from typing import List
 from sqlalchemy.orm import Session
 from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
+from app.engine.nodes.ai_article import analyze_article_node
+from app.engine.nodes.image_research import image_research_agent_node
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category, ProcessingStatusEnum
@@ -124,6 +126,46 @@ class WorkflowService:
                 db.commit()
             logger.error(f"[Workflow] Error: {e}", exc_info=True)
             raise
+        finally:
+            db.close()
+
+    async def run_image_research_debug(self, issue_id: int) -> dict:
+        """
+        [DEBUG] analyze_article + image_research 두 단계만 실행하여 쿄사 데이터 없이 참조 이미지 URL만 반환.
+        DB 상태를 변경하지 않음.
+        """
+        db = SessionLocal()
+        try:
+            issue = db.query(Issue).filter(Issue.id == issue_id).first()
+            if not issue:
+                raise ValueError(f"Issue ID {issue_id} not found.")
+
+            raw_articles = issue.articles
+            if not raw_articles:
+                raise ValueError(f"No articles found for Issue ID {issue_id}")
+
+            merged_content = "\n\n---\n\n".join([
+                f"기사 제목: {a.title}\n본문: {a.content}"
+                for a in raw_articles
+            ])
+
+            # 분석 노드만 실행
+            state = {
+                "raw_article_context": merged_content,
+                "raw_article_title": issue.title,
+            }
+            state = await analyze_article_node(state)
+
+            # 이미지 리서치 에이전트 실행
+            research_result = await image_research_agent_node(state)
+            state.update(research_result)
+
+            return {
+                "issue_id": issue_id,
+                "final_title": state.get("final_title", ""),
+                "summary": state.get("summary", []),
+                "reference_image_url": state.get("reference_image_url"),
+            }
         finally:
             db.close()
 

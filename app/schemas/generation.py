@@ -10,3 +10,9 @@ class AiArticleBatchGenerationRequest(BaseModel):
 
 class TodayNewsnackRequest(BaseModel):
     issue_ids: List[int]
+
+class ImageResearchDebugResponse(BaseModel):
+    issue_id: int
+    final_title: str
+    summary: List[str]
+    reference_image_url: str | None

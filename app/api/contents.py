@@ -1,6 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, status, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse, TodayNewsnackRequest
+from app.schemas.generation import AiArticleBatchGenerationRequest, GenerationStatusResponse, TodayNewsnackRequest, ImageResearchDebugResponse
 from app.services.workflow_service import workflow_service
 
 router = APIRouter(tags=["Content Generation"])
@@ -34,6 +34,21 @@ async def create_batch_ai_articles(
         status="accepted",
         message=f"총 {len(request.issue_ids)}개 요청 중 {len(occupied_ids)}개의 콘텐츠 생성이 시작되었습니다.",
     )
+
+
+@router.get(
+    "/ai-articles/debug/image-research/{issue_id}",
+    summary="[DEBUG] 이미지 리서치 에이전트 단독 테스트",
+    description="이슈 ID에 대해 분석과 이미지 리서치 단계만 실행합니다. DB 상태를 변경하지 않습니다.",
+    response_model=ImageResearchDebugResponse,
+)
+async def debug_image_research(issue_id: int):
+    try:
+        result = await workflow_service.run_image_research_debug(issue_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
 
 @router.post("/today-newsnack",
             summary="오늘의 뉴스낵 생성",
