@@ -37,20 +37,21 @@ async def image_researcher_node(state: AiArticleState):
 
         # 디버그: 전체 메시지 타입 및 content 덤프
         for i, msg in enumerate(messages):
-            content_preview = (msg.content or "")[:120].replace("\n", " ")
+            content_str = str(msg.content) if msg.content else ""
+            content_preview = content_str[:120].replace("\n", " ")
             logger.debug(f"[ImageResearchAgent] msg[{i}] type={type(msg).__name__}, content='{content_preview}'")
 
         # create_agent는 마지막 AIMessage가 빈 content를 가질 수 있으므로
         # 메시지 전체를 역순 탐색하여 URL이 포함된 첫 번째 메시지를 찾음
         final_url = None
         for msg in reversed(messages):
-            content = msg.content if isinstance(msg.content, str) else ""
+            content = str(msg.content) if msg.content else ""
             if content.strip() == "NONE":
                 final_url = None
                 break
-            url_match = re.search(r'(https?://[^\s]+)', content)
+            url_match = re.search(r'(https?://[^\s\'"<>{}]+)', content)
             if url_match:
-                final_url = url_match.group(1)
+                final_url = url_match.group(1).rstrip('.,;:)[]}')
                 break
 
         if final_url is None:
