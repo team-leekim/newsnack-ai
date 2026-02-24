@@ -25,6 +25,7 @@ You have three tools:
    - NO (small local company, government agency, unknown startup) → reply NONE immediately.
 
 3. If it's a person → call get_person_thumbnail.
+   - Pass the name exactly as written in the article. Do NOT translate or romanize it.
    - If "TOOL_FAILED" → fall back to get_general_image.
 
 4. If it's an abstract concept, event, or object (e.g. interest rates, climate change, semiconductor exports) → reply NONE immediately.

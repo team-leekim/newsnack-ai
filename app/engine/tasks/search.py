@@ -58,7 +58,7 @@ async def get_person_thumbnail(person_name: str) -> str:
     """
     유명 인물이나 고유 명사의 위키백과 공식 프로필 사진(썸네일) URL을 가져옵니다.
     뉴스 기사에 등장하는 주요 인물(정치인, 연예인, 운동선수 등) 검색 시 가장 적합합니다.
-    한국어 이름도 영어 이름도 모두 입력 가능합니다.
+    이름은 기사에 표기된 그대로 전달하세요. 번역하거나 로마자로 변환하지 마세요.
     """
     headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
 
