@@ -36,14 +36,18 @@ sequenceDiagram
     participant Scheduler as 외부 오케스트레이션(Airflow 등)
     participant API as FastAPI AI 서버
     participant Graph as LangGraph 워크플로
+    participant Tools as 검색 도구(Logo.dev/Wikipedia/Kakao)
     participant LLM as Gemini/OpenAI
     participant S3 as Amazon S3
     participant DB as PostgreSQL(RDS)
 
     Scheduler->>API: POST /ai-articles
     API->>Graph: AI 기사 워크플로 실행
-    Graph->>LLM: 기사 분석/본문/프롬프트 생성
-    Graph->>LLM: 이미지 생성
+    Graph->>LLM: 기사 분석
+    Graph->>Tools: (선택) 관련 이미지 리서치
+    Graph->>LLM: (선택) 찾은 이미지 검증
+    Graph->>LLM: 본문 및 프롬프트 생성
+    Graph->>LLM: 이미지 생성 (전면 또는 리서치 기반 참조)
     Graph->>S3: 이미지 업로드
     Graph->>DB: ai_article 저장
 
@@ -64,14 +68,20 @@ sequenceDiagram
 ```mermaid
 graph TD
     Start[시작] --> Analyze[뉴스 분석<br/>analyze_article_node]
-    Analyze --> |제목/요약/타입 결정| SelectEditor[에디터 선정<br/>select_editor_node]
+    Analyze --> |제목/요약/타입 결정| CheckResearch{리서치 여부}
+    
+    CheckResearch --> |Google 참조 가능| ImageResearcher[이미지 리서치<br/>image_researcher_node]
+    ImageResearcher --> |찾은 이미지| ImageValidator[이미지 검증<br/>image_validator_node]
+    ImageValidator --> |검증 완료| SelectEditor[에디터 선정<br/>select_editor_node]
+    
+    CheckResearch --> |리서치 스킵| SelectEditor
     SelectEditor --> |카테고리 매칭 or 랜덤| ContentCreator[본문 생성<br/>content_creator_node]
     ContentCreator --> |본문 + 이미지 프롬프트 4개| ImageGen[이미지 생성<br/>image_gen_node]
     
-    ImageGen --> |병렬 생성 전략| ImageStrategy{프로바이더}
-    ImageStrategy --> |OpenAI| OpenAI[4장 전면 병렬 생성]
-    ImageStrategy --> |Google + 참조 O| GoogleRef[1장 생성 후<br/>3장 참조 병렬 생성]
-    ImageStrategy --> |Google + 참조 X| GoogleNoRef[4장 전면 병렬 생성]
+    ImageGen --> |생성 전략| ImageStrategy{프로바이더 / 설정}
+    ImageStrategy --> |OpenAI| OpenAI[4장 개별 생성]
+    ImageStrategy --> |Google + 스타일 일관성 OFF| GoogleNoRef[4장 개별 생성]
+    ImageStrategy --> |Google + 스타일 일관성 ON| GoogleRef[1장 생성 후<br/>나머지 3장에 스타일 적용]
     
     OpenAI --> Save[DB 저장<br/>save_ai_article_node]
     GoogleRef --> Save
@@ -82,12 +92,14 @@ graph TD
 
 **주요 노드 설명:**
 - `analyze_article_node`: 원본 기사 분석, 제목/요약 생성, 콘텐츠 타입(웹툰/카드뉴스) 결정
+- `image_researcher_node`: 로고, 인물, 일반 이미지 등 기사 맥락에 맞는 요소 리서치 (Gemini Pro 모델 사용 시)
+- `image_validator_node`: 리서치된 이미지가 원본 기사에 적합한지 멀티모달 모델로 정밀 검증
 - `select_editor_node`: 이슈의 카테고리와 일치하는 에디터 배정 (없으면 랜덤)
 - `content_creator_node`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성 (콘텐츠 타입에 따라 웹툰/카드뉴스 스타일 내부 분기)
-- `image_gen_node`: 프로바이더별 이미지 생성 전략 실행
-  - OpenAI: 4장 전면 병렬 생성
-  - Google (참조 O): 1장 기준 이미지 생성 후 나머지 3장을 참조해 병렬 생성
-  - Google (참조 X): 4장 전면 병렬 생성
+- `image_gen_node`: 프로바이더 설정에 따라 최종 이미지 4장 생성
+  - OpenAI 및 Google(스타일 일관성 OFF): 각 컷을 개별적으로 병렬 생성
+  - Google(스타일 일관성 ON): 컷 간 작화 유지를 위해 1장을 기준 이미지로 선 생성 후, 나머지 3장은 이를 **'스타일'로 참조**하여 생성
+  - *참고: 만약 `image_researcher_node`에서 찾은 이미지(실사, 로고 등)가 있다면, 1장(기준) 생성 단계에서 이를 **'내용(Content)'으로 추가 참조**하여 기사 맥락을 반영함*
 - `save_ai_article_node`: ai_article 테이블 저장, reaction_count 초기화, 이슈 처리 상태 업데이트
 
 ### 오늘의 뉴스낵 생성 플로우
@@ -144,6 +156,10 @@ AI 프로바이더:
 - `AI_PROVIDER`: `google`(기본) 또는 `openai`
 - `GOOGLE_API_KEY` (AI_PROVIDER=google일 때 필수)
 - `OPENAI_API_KEY` (AI_PROVIDER=openai일 때 필수)
+
+검색 도구 API (선택. 이미지 리서치 기능 사용 시):
+- `LOGO_DEV_SECRET_KEY`, `LOGO_DEV_PUBLISHABLE_KEY`: 기업 로고 검색용 (Logo.dev)
+- `KAKAO_REST_API_KEY`: 기존 도구 실패 시 이미지 검색용 (Kakao)
 
 모델 설정(선택):
 - `GOOGLE_CHAT_MODEL`, `OPENAI_CHAT_MODEL`
