@@ -9,6 +9,7 @@ import logging
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .s3 import s3_manager
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ async def _fetch_image(url: str, headers: dict) -> Image.Image:
 async def download_image_from_url(url: str) -> Optional[Image.Image]:
     """주어진 URL에서 이미지를 다운로드하여 PIL Image 반환 (재시도 포함)"""
     try:
-        headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
+        headers = {"User-Agent": settings.USER_AGENT}
         return await _fetch_image(url, headers)
     except Exception as e:
         logger.error(f"[download_image_from_url] Failed to download {url} after retries: {e}")

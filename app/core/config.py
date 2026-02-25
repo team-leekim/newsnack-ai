@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Newsnack AI Server"
+    USER_AGENT: str = "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"
     
     # AI Provider
     AI_PROVIDER: Literal["google", "openai"] = "google"

@@ -69,7 +69,7 @@ async def get_person_thumbnail(person_name: str) -> str:
     Returns:
         JSON 형식의 인물 썸네일 목록
     """
-    headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
+    headers = {"User-Agent": settings.USER_AGENT}
 
     async with httpx.AsyncClient() as client:
         try:
