@@ -123,35 +123,24 @@ async def image_gen_node(state: AiArticleState):
                 logger.info(f"[ImageGen] Generating anchor image based on Agent's content reference.")
                 # 0번 이미지는 에이전트의 실사 이미지를 '내용(content)'으로 참조하여 생성
                 anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=agent_ref_image, ref_type="content")
-                images.append(anchor_image)
-
-                logger.info(f"[ImageGen] Generating remaining images based on anchor image's style.")
-                # 1~3번 이미지는 방금 만든 0번 이미지(만화풍)를 '스타일(style)'로 참조하여 생성
-                tasks = [
-                    generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image, ref_type="style")
-                    for i in range(1, 4)
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                for i, result in enumerate(results, start=1):
-                    if isinstance(result, Exception):
-                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
-                    images.append(result)
             else:
                 logger.info(f"[ImageGen] No agent reference image. Generating anchor image first.")
                 anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
-                images.append(anchor_image)
+            
+            images.append(anchor_image)
 
-                tasks = [
-                    generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image, ref_type="style")
-                    for i in range(1, 4)
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(f"[ImageGen] Generating remaining images based on anchor image's style.")
+            # 1~3번 이미지는 방금 만든 0번 이미지(만화풍)를 '스타일(style)'로 참조하여 생성
+            tasks = [
+                generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image, ref_type="style")
+                for i in range(1, 4)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                for i, result in enumerate(results, start=1):
-                    if isinstance(result, Exception):
-                        raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
-                    images.append(result)
+            for i, result in enumerate(results, start=1):
+                if isinstance(result, Exception):
+                    raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
+                images.append(result)
 
         else:
             if settings.AI_PROVIDER == "openai":
