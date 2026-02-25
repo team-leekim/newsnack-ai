@@ -58,7 +58,7 @@ async def image_validator_node(state: AiArticleState):
         
         # 3. Analyze output
         if not validator_res.is_valid:
-            logger.warning(f"[ImageValidatorNode] Rejected. Image URL: {final_url} | Reason: {validator_res.reason}")
+            logger.warning(f"[ImageValidatorNode] Rejected. Image URL: {final_url} Reason: {validator_res.reason}")
             return {"reference_image_url": None}
         else:
             logger.info(f"[ImageValidatorNode] Approved. Image URL: {final_url}")
