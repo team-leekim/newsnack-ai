@@ -1,6 +1,5 @@
-import logging
-import base64
 import httpx
+import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..providers import ai_factory

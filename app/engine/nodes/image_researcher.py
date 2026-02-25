@@ -51,7 +51,7 @@ async def image_researcher_node(state: AiArticleState):
                 break
             url_match = re.search(r'(https?://[^\s\'"<>{}]+)', content)
             if url_match:
-                final_url = url_match.group(1).rstrip('.,;:)[]}')
+                final_url = url_match.group(1)
                 break
 
         if final_url is None:
