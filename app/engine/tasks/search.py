@@ -1,9 +1,7 @@
 import json
+import httpx
 import logging
 import urllib.parse
-from typing import List
-
-import httpx
 from langchain_core.tools import tool
 
 from app.core.config import settings
@@ -12,14 +10,18 @@ logger = logging.getLogger(__name__)
 
 
 @tool("get_company_logo")
-async def get_company_logo(company_name: str) -> str:
+async def get_company_logo(company_name_in_english: str) -> str:
     """
     기업/브랜드의 로고 이미지 후보 목록을 검색합니다.
-    반드시 영어 공식 명칭으로 검색하세요.
-    여러 후보의 로고 URL이 포함된 JSON 목록이 반환되며, 기사 문맥에 가장 부합하는
-    항목의 logo_url을 최종 답변으로 선택해야 합니다.
+    반드시 영어 공식 명칭(ENGLISH name)으로 검색하세요. 한글은 허용되지 않습니다.
+
+    Args:
+        company_name_in_english: 기업/브랜드의 영어 공식 명칭
+
+    Returns:
+        JSON 형식의 로고 이미지 후보 목록
     """
-    search_url = f"https://api.logo.dev/search?q={urllib.parse.quote(company_name)}&strategy=match"
+    search_url = f"https://api.logo.dev/search?q={urllib.parse.quote(company_name_in_english)}"
     headers = {"Authorization": f"Bearer {settings.LOGO_DEV_SECRET_KEY}"}
 
     async with httpx.AsyncClient() as client:
@@ -42,11 +44,12 @@ async def get_company_logo(company_name: str) -> str:
                         if item.get("domain")
                     ]
                     if candidates:
-                        logger.info(f"[get_company_logo] Found {len(candidates)} candidates for: {company_name}")
+                        logger.info(f"[get_company_logo] Found {len(candidates)} candidates for: {company_name_in_english}")
                         return json.dumps(candidates, ensure_ascii=False)
 
-            logger.warning(f"[get_company_logo] No candidates found for: {company_name}")
+            logger.warning(f"[get_company_logo] No candidates found for: {company_name_in_english}")
             return "TOOL_FAILED: No brand candidates found. MUST try get_fallback_image instead."
+
         except Exception as e:
             logger.error(f"[get_company_logo] API fetch failed: {e}")
             return f"TOOL_FAILED: Error occurred - {e}. MUST try get_fallback_image instead."
@@ -59,6 +62,12 @@ async def get_person_thumbnail(person_name: str) -> str:
     뉴스 기사에 등장하는 주요 인물(정치인, 연예인, 운동선수 등) 검색 시 가장 적합합니다.
     이름은 기사에 표기된 그대로 전달하세요. 번역하거나 로마자로 변환하지 마세요.
     반환된 JSON 목록 [{title, description, thumbnail_url}]을 확인하고 기사 문맥에 맞는 인물을 골라 최종 URL을 선택하세요.
+
+    Args:
+        person_name: 인물의 이름
+
+    Returns:
+        JSON 형식의 인물 썸네일 목록
     """
     headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
 
@@ -131,6 +140,12 @@ async def get_fallback_image(query: str) -> str:
       * 기관/기업 검색 예시: "[브랜드/기관명] 로고" (예: "삼성 로고")
     - 반환된 JSON은 {image_url, display_sitename, doc_url} 구조를 갖습니다.
     - display_sitename(출처)이 뉴스 매체이거나 신뢰성 있는 블로그인 경우를 우선하여 선택하세요.
+
+    Args:
+        query: 검색어
+
+    Returns:
+        JSON 형식의 이미지 목록
     """
     if not settings.KAKAO_REST_API_KEY:
         return "TOOL_FAILED: KAKAO_REST_API_KEY is not configured."
