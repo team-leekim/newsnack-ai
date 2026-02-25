@@ -59,10 +59,10 @@ async def image_validator_node(state: AiArticleState):
         
         # 3. Analyze output
         if not validator_res.is_valid:
-            logger.warning(f"[ImageValidatorNode] rejected image ({final_url}). Reason: {validator_res.reason}")
+            logger.warning(f"[ImageValidatorNode] Rejected. Image URL: {final_url} | Reason: {validator_res.reason}")
             return {"reference_image_url": None}
         else:
-            logger.info(f"[ImageValidatorNode] approved image. Reason: {validator_res.reason}")
+            logger.info(f"[ImageValidatorNode] Approved. Image URL: {final_url}")
             return {"reference_image_url": final_url}
 
     except httpx.RequestError as e:
@@ -70,5 +70,4 @@ async def image_validator_node(state: AiArticleState):
         return {"reference_image_url": None}
     except Exception as ve:
         logger.error(f"[ImageValidatorNode] Validation skipped/failed due to error: {ve}")
-        # 오류 발생 시 이미지를 보유하고 다음 단계로 진행
-        return {"reference_image_url": final_url}
+        return {"reference_image_url": None}
