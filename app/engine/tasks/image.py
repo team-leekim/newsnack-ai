@@ -85,12 +85,37 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
                 image_config=image_config
             )
         )
+        
+        if not response.parts:
+            reason = "UNKNOWN"
+            
+            # Check if it was blocked at the prompt level
+            prompt_feedback = getattr(response, 'prompt_feedback', None)
+            if prompt_feedback and getattr(prompt_feedback, 'block_reason', None):
+                block_reason = prompt_feedback.block_reason
+                reason = f"PROMPT_BLOCKED ({getattr(block_reason, 'name', str(block_reason))})"
+                message = getattr(prompt_feedback, 'block_reason_message', None)
+                if message:
+                    reason += f" - {message}"
+                
+            # Check if it was blocked at the candidate level
+            elif getattr(response, 'candidates', None):
+                candidate = response.candidates[0]
+                finish_reason = getattr(candidate, 'finish_reason', None)
+                if finish_reason:
+                    reason = getattr(finish_reason, 'name', str(finish_reason))
+                    finish_message = getattr(candidate, 'finish_message', None)
+                    if finish_message:
+                        reason += f" - {finish_message}"
+                    
+            raise ValueError(f"Gemini API returned empty parts for image {idx}. Reason: {reason}")
+
         img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
         if img_part:
             img = Image.open(BytesIO(img_part.data))
             return img
         else:
-            raise ValueError(f"No image data in response for image {idx}")
+            raise ValueError(f"No inline_data found in response parts for image {idx}")
 
     except Exception as e:
         logger.error(f"Error generating image {idx}: {e}")
