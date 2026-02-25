@@ -103,6 +103,9 @@ jobs:
               -e AWS_S3_BUCKET="${{ secrets.AWS_S3_BUCKET }}" \
               -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
               -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e LOGO_DEV_SECRET_KEY="${{ secrets.LOGO_DEV_SECRET_KEY }}" \
+              -e LOGO_DEV_PUBLISHABLE_KEY="${{ secrets.LOGO_DEV_PUBLISHABLE_KEY }}" \
+              -e KAKAO_REST_API_KEY="${{ secrets.KAKAO_REST_API_KEY }}" \
               $IMAGE_URI
 
             # 5. 헬스체크
