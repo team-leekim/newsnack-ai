@@ -4,6 +4,8 @@ import logging
 from typing import List
 from sqlalchemy.orm import Session
 from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
+from app.engine.nodes.ai_article import analyze_article_node
+from app.engine.nodes.image_researcher import image_researcher_node
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category, ProcessingStatusEnum

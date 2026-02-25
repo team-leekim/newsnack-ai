@@ -1,8 +1,9 @@
 import asyncio
 import logging
-
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
+
+from app.utils.image import download_image_from_url
 
 from ..providers import ai_factory
 from ..state import AiArticleState
@@ -109,11 +110,29 @@ async def image_gen_node(state: AiArticleState):
         if settings.AI_PROVIDER == "google" and settings.GOOGLE_IMAGE_WITH_REFERENCE:
             logger.info(f"[ImageGen] Using Gemini (reference) for {content_key}")
 
-            anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
+            agent_ref_image = None
+            ref_url = state.get("reference_image_url")
+            if ref_url:
+                agent_ref_image = await download_image_from_url(ref_url)
+                if agent_ref_image:
+                    logger.info("[ImageGen] Successfully downloaded agent reference image")
+                else:
+                    logger.warning("[ImageGen] Failed to download agent reference image from URL")
+
+            if agent_ref_image:
+                logger.info(f"[ImageGen] Generating anchor image based on Agent's content reference.")
+                # 0번 이미지는 에이전트의 실사 이미지를 '내용(content)'으로 참조하여 생성
+                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=agent_ref_image, ref_type="content")
+            else:
+                logger.info(f"[ImageGen] No agent reference image. Generating anchor image first.")
+                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
+            
             images.append(anchor_image)
 
+            logger.info(f"[ImageGen] Generating remaining images based on anchor image's style.")
+            # 1~3번 이미지는 방금 만든 0번 이미지(만화풍)를 '스타일(style)'로 참조하여 생성
             tasks = [
-                generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image)
+                generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image, ref_type="style")
                 for i in range(1, 4)
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)

@@ -35,6 +35,7 @@ async def create_batch_ai_articles(
         message=f"총 {len(request.issue_ids)}개 요청 중 {len(occupied_ids)}개의 콘텐츠 생성이 시작되었습니다.",
     )
 
+
 @router.post("/today-newsnack",
             summary="오늘의 뉴스낵 생성",
             description="지정된 이슈 ID에 해당하는 AI 기사로 오늘의 뉴스낵 콘텐츠를 생성합니다.",

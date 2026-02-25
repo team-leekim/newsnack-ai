@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Newsnack AI Server"
+    USER_AGENT: str = "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"
     
     # AI Provider
     AI_PROVIDER: Literal["google", "openai"] = "google"
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
     API_KEY: str
     GOOGLE_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    LOGO_DEV_SECRET_KEY: Optional[str] = None
+    LOGO_DEV_PUBLISHABLE_KEY: Optional[str] = None
+    KAKAO_REST_API_KEY: Optional[str] = None
     
     # Database & Storage
     DB_URL: str
@@ -45,6 +49,9 @@ class Settings(BaseSettings):
             raise ValueError("AI_PROVIDER가 'google'일 때는 GOOGLE_API_KEY가 필수입니다.")
         if self.AI_PROVIDER == "openai" and not self.OPENAI_API_KEY:
             raise ValueError("AI_PROVIDER가 'openai'일 때는 OPENAI_API_KEY가 필수입니다.")
+        if self.AI_PROVIDER == "google" and self.GOOGLE_IMAGE_WITH_REFERENCE:
+            if not self.LOGO_DEV_SECRET_KEY or not self.LOGO_DEV_PUBLISHABLE_KEY or not self.KAKAO_REST_API_KEY:
+                raise ValueError("GOOGLE_IMAGE_WITH_REFERENCE 설정 시 LOGO_DEV_SECRET_KEY, LOGO_DEV_PUBLISHABLE_KEY, KAKAO_REST_API_KEY가 필수입니다.")
         return self
     
     model_config = SettingsConfigDict(

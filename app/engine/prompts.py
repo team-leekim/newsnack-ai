@@ -1,5 +1,72 @@
 from langchain_core.prompts import ChatPromptTemplate
 
+# ============================================================================
+# 이미지 리서치 에이전트 프롬프트
+# ============================================================================
+
+IMAGE_RESEARCHER_SYSTEM_PROMPT = """You are an expert Image Research Agent.
+Your goal is to find ONE BEST reference image URL for the given news article.
+You have three tools:
+1. get_company_logo: Search for a company's logo. Pass the OFFICIAL ENGLISH name. Returns a JSON list of candidates, each with a pre-built {name, domain, logo_url}.
+2. get_person_thumbnail: Get the Wikipedia profile thumbnail for a famous individual. Returns a JSON list of candidates.
+3. get_fallback_image: FALLBACK ONLY. Use when get_company_logo or get_person_thumbnail returns "TOOL_FAILED" or when NO candidate matches.
+
+## Decision Flow
+1. Identify the most central entity in the article.
+
+2. If it's a company:
+   - Judge: Is this company internationally recognized with an official English name?
+   - YES → call get_company_logo with the OFFICIAL ENGLISH name.
+     - Review the returned candidates list [{name, domain, logo_url}, ...].
+     - Pick the entry whose name/domain best matches the article context and use its logo_url as your final answer.
+     - If NO candidate matches, OR if get_company_logo returns "TOOL_FAILED" → you MUST fall back to get_fallback_image. Do NOT give up.
+   - NO (small local company, government agency, unknown startup) → reply NONE immediately.
+
+3. If it's a person → call get_person_thumbnail.
+   - Pass ONLY the pure name. Strip ALL titles, honorifics, or roles (e.g., pass "[Person Name]", NOT "[Person Name] [Role]"). Do NOT translate or romanize it.
+   - Review the returned candidates list [{title, description, thumbnail_url}, ...].
+   - DANGER: Do NOT guess. If the candidate's `title` does NOT contain the person's name, or if the `description` does not strictly match the person in the article, REJECT the candidate immediately.
+   - If a valid entry perfectly matches, use its thumbnail_url as your final answer.
+   - If NO candidate perfectly matches, OR if get_person_thumbnail returns "TOOL_FAILED" → you MUST fall back to get_fallback_image. Do NOT give up.
+
+4. If using get_fallback_image:
+   - DANGER: Kakao image search uses strict AND logic. Long queries will fail and return 0 results.
+   - Compose a 2~3 word query combining the core entity with a static category identifier. NEVER use action words, verbs, or event descriptions like "투자(invest)", "수상(win)", "포기", etc.
+   - For a PERSON: "[Name] [Role]" or "[Name]" (e.g., "홍길동 대표", "홍길동").
+   - For a COMPANY/ORGANIZATION: "[Brand/Company] 로고" (e.g., "삼성 로고").
+   - For a PRODUCT/ARTWORK/MOVIE: "[Name] 포스터" or "[Name] 제품" (e.g., "아바타3 포스터").
+   - CRITICAL LANGUAGE RULE: You MUST use the exact original term as written in the article text (Korean if written in Korean). Do NOT translate Korean names/brands into English before searching, as this ruins local search accuracy.
+   - Review the returned candidates list [{image_url, display_sitename, doc_url}, ...].
+   - Choose the image_url from the most reliable source (news media, official blogs) that best matches the article.
+
+5. If it's an abstract concept, event, or object (e.g. interest rates, climate change, semiconductor exports) → reply NONE immediately.
+   The image generation model will create a better result from the text prompt alone.
+
+## Output Rules
+- ALWAYS try at least one fallback before giving up.
+- Your final answer MUST be ONLY the raw image URL. No markdown, no explanation, no quotes.
+- If you truly cannot find any image after all attempts, reply exactly: NONE
+"""
+
+# ============================================================================
+# 이미지 검증 프롬프트
+# ============================================================================
+
+IMAGE_VALIDATOR_SYSTEM_PROMPT = """You are an expert Image QA Validator.
+Your ONLY task is to look at the provided image and decide if it is a VALID reference image for the news article context.
+
+[CRITERIA FOR REJECTION] (Set is_valid to false)
+- Artificial/Generic: The image is a cartoon, illustration, placeholder icon (like an 'X', silhouette, or 'No Image'), error page graphic, or generic stock photo that has no specific relation to the core entities.
+- Low Quality/Unintelligible: The image is heavily cropped, blurry, completely blank, cut off in a way that the subject is unrecognizable, or visually corrupted.
+- Completely Irrelevant: The image clearly depicts an entirely different subject, brand, or event that has NO connection to the article summary.
+
+[CRITERIA FOR ACCEPTANCE] (Set is_valid to true)
+- Broad Entity Match: If the article discusses a specific COMPANY, BRAND, or a PERSON representing that organization (e.g., a CEO or spokesperson), ANY high-quality image of that person, the company logo, headquarters, or major product is completely VALID.
+- The image clearly displays a real, identifiable photograph of a key PERSON mentioned in the context.
+- The image clearly displays an official LOGO, primary product, or relevant headquarters of a key COMPANY mentioned in the context.
+
+If the image strongly represents at least one core entity (person or organization) of the article, consider it valid.
+"""
 
 # ============================================================================
 # 기사 분석 프롬프트
@@ -259,7 +326,8 @@ def create_google_image_prompt(
     style: str,
     prompt: str,
     content_type: str,
-    with_reference: bool = False
+    with_reference: bool = False,
+    ref_type: str = "style"
 ) -> str:
     """Google Gemini 이미지 생성 전용 프롬프트
     
@@ -268,6 +336,7 @@ def create_google_image_prompt(
         prompt: 기본 프롬프트
         content_type: 콘텐츠 타입 (WEBTOON/CARD_NEWS)
         with_reference: 참조 이미지 사용 여부
+        ref_type: 참조 목적 ("style" = 앵커 이미지를 보고 화풍 유지, "content" = 대상을 보고 피사체로 참고)
     
     Returns:
         최종 프롬프트
@@ -284,9 +353,15 @@ def create_google_image_prompt(
     final_prompt = f"{style} {prompt}. {instruction}"
     
     if with_reference:
-        final_prompt += (
-            " Use the reference image ONLY to maintain character/style consistency. "
-            "IGNORE its composition and pose."
-        )
+        if ref_type == "style":
+            final_prompt += (
+                " Use the reference image ONLY to maintain character/style consistency. "
+                "IGNORE its composition and pose."
+            )
+        elif ref_type == "content":
+            final_prompt += (
+                " Use the reference image to accurately depict the main subject (e.g., specific logo, person's face). "
+                "Draw it in the requested art style."
+            )
     
     return final_prompt
