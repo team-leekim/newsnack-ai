@@ -16,8 +16,11 @@
 [![LangChain]][LangChain url]
 [![Google Gemini]][Google Gemini url]
 [![OpenAI]][OpenAI url]
-[![PostgreSQL]][PostgreSQL url]
+[![GitHub Actions]][GitHub Actions url]
+[![Docker]][Docker url]
+[![Amazon EC2]][Amazon EC2 url]
 [![AWS S3]][AWS S3 url]
+[![PostgreSQL]][PostgreSQL url]
 [![Python]][Python url]
 
 ## 동작 방식
@@ -27,21 +30,21 @@
 3. 뉴스낵 브리핑 워크플로는 하루 2회(아침/저녁) 자동 실행됩니다.
 4. 생성된 미디어는 S3에 업로드되고, 메타데이터는 데이터베이스에 저장됩니다.
 
-## 아키텍처
+## 시스템 아키텍처
 
-> 외부 오케스트레이션 시스템과 AI 서버의 관계
+> 외부 시스템과 AI 서버의 관계
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as 외부 오케스트레이션(Airflow 등)
-    participant API as FastAPI AI 서버
-    participant Graph as LangGraph 워크플로
-    participant Tools as 검색 도구(Logo.dev/Wikipedia/Kakao)
-    participant LLM as Gemini/OpenAI
-    participant S3 as Amazon S3
-    participant DB as PostgreSQL(RDS)
+    participant Orchestrator as Orchestrator<br/>(Airflow)
+    participant API as AI Server<br/>(FastAPI)
+    participant Graph as AI Workflow<br/>(LangGraph)
+    participant Tools as Search Tools<br/>(Logo.dev/Wikipedia/Kakao)
+    participant LLM as LLM<br/>(Gemini/OpenAI)
+    participant S3 as Storage<br/>(Amazon S3)
+    participant DB as Database<br/>(Amazon RDS)
 
-    Scheduler->>API: POST /ai-articles
+    Orchestrator->>API: POST /ai-articles
     API->>Graph: AI 기사 워크플로 실행
     Graph->>LLM: 기사 분석
     Graph->>Tools: (선택) 관련 이미지 리서치
@@ -51,7 +54,7 @@ sequenceDiagram
     Graph->>S3: 이미지 업로드
     Graph->>DB: ai_article 저장
 
-    Scheduler->>API: POST /today-newsnack
+    Orchestrator->>API: POST /today-newsnack
     API->>Graph: 오늘의 뉴스낵 워크플로 실행
     Graph->>LLM: 브리핑 대본 생성
     Graph->>LLM: TTS 오디오 생성
@@ -92,7 +95,7 @@ graph TD
 
 **주요 노드 설명:**
 - `analyze_article_node`: 원본 기사 분석, 제목/요약 생성, 콘텐츠 타입(웹툰/카드뉴스) 결정
-- `image_researcher_node`: 로고, 인물, 일반 이미지 등 기사 맥락에 맞는 요소 리서치 (Gemini Pro 모델 사용 시)
+- `image_researcher_node`: 로고, 인물, 일반 이미지 등 기사 맥락에 맞는 요소 리서치 (Gemini 3 Pro Image 모델 사용 시)
 - `image_validator_node`: 리서치된 이미지가 원본 기사에 적합한지 멀티모달 모델로 정밀 검증
 - `select_editor_node`: 이슈의 카테고리와 일치하는 에디터 배정 (없으면 랜덤)
 - `content_creator_node`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성 (콘텐츠 타입에 따라 웹툰/카드뉴스 스타일 내부 분기)
@@ -191,9 +194,15 @@ uvicorn app.main:app --reload
 [Google Gemini url]: https://ai.google.dev/gemini-api/docs/
 [OpenAI]: https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white
 [OpenAI url]: https://openai.com/
-[PostgreSQL]: https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white
-[PostgreSQL url]: https://www.postgresql.org/
+[GitHub Actions]: https://img.shields.io/badge/github%20actions-%232088FF.svg?style=for-the-badge&logo=githubactions&logoColor=white
+[GitHub Actions url]: https://github.com/features/actions
+[Docker]: https://img.shields.io/badge/docker-%232496ED.svg?style=for-the-badge&logo=docker&logoColor=white
+[Docker url]: https://www.docker.com/
+[Amazon EC2]: https://img.shields.io/badge/Amazon%20EC2-%23FF9900.svg?style=for-the-badge&logo=amazonec2&logoColor=white
+[Amazon EC2 url]: https://aws.amazon.com/ec2/
 [AWS S3]: https://img.shields.io/badge/AWS%20S3-FF9900?style=for-the-badge&logo=amazon-s3&logoColor=white
 [AWS S3 url]: https://aws.amazon.com/s3/
+[PostgreSQL]: https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white
+[PostgreSQL url]: https://www.postgresql.org/
 [Python]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
 [Python url]: https://www.python.org/
