@@ -7,6 +7,7 @@ from ..providers import ai_factory
 from ..state import AiArticleState
 from ..prompts import IMAGE_VALIDATOR_SYSTEM_PROMPT
 from ..schemas import ImageValidationResponse
+from app.utils.image import download_image_from_url, image_to_base64_url
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +38,13 @@ async def image_validator_node(state: AiArticleState):
     )
 
     try:
-        headers = {"User-Agent": "Newsnack/1.0 (https://newsnack.site; contact@newsnack.site)"}
-
         # 1. Download image to convert to base64 for reliable multi-modal LLM processing
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(final_url, headers=headers)
-            resp.raise_for_status()
-            img_data = resp.content
-            content_type = resp.headers.get("content-type", "image/jpeg")
-            img_b64 = base64.b64encode(img_data).decode("utf-8")
-            base64_url = f"data:{content_type};base64,{img_b64}"
+        img = await download_image_from_url(final_url)
+        if not img:
+            logger.warning(f"[ImageValidatorNode] Failed to download or convert image from {final_url}")
+            return {"reference_image_url": None}
+            
+        base64_url = image_to_base64_url(img)
 
         # 2. Extract structured response from LLM
         validator_content = [
