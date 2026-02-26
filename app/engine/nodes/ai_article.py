@@ -25,7 +25,7 @@ analyze_llm = chat_model.with_structured_output(AnalysisResponse)
 editor_llm = chat_model.with_structured_output(EditorContentResponse)
 
 
-async def analyze_article_node(state: AiArticleState):
+async def analyze_article(state: AiArticleState):
     """뉴스 분석"""
     context = state['raw_article_context']
     original_title = state['raw_article_title']
@@ -44,7 +44,7 @@ async def analyze_article_node(state: AiArticleState):
     }
 
 
-async def select_editor_node(state: AiArticleState):
+async def select_editor(state: AiArticleState):
     """DB에서 전문 분야(Category)가 일치하는 에디터 배정"""
     db: Session = state["db_session"]
     category_name = state["category_name"]
@@ -74,7 +74,7 @@ async def select_editor_node(state: AiArticleState):
     }
 
 
-async def content_creator_node(state: AiArticleState):
+async def draft_article(state: AiArticleState):
     """콘텐츠 타입(WEBTOON/CARD_NEWS)에 맞는 본문 및 이미지 프롬프트 생성"""
     editor = state['editor']
     content_type = state['content_type']
@@ -98,7 +98,7 @@ async def content_creator_node(state: AiArticleState):
     }
 
 
-async def image_gen_node(state: AiArticleState):
+async def generate_images(state: AiArticleState):
     """이미지 병렬 생성"""
     content_key = state['content_key']
     content_type = state['content_type']
@@ -174,7 +174,7 @@ async def image_gen_node(state: AiArticleState):
         raise ValueError(f"이미지 생성 실패: {e}") from e
 
 
-async def save_ai_article_node(state: AiArticleState):
+async def save_ai_article(state: AiArticleState):
     """최종 결과물 DB 저장"""
     db: Session = state['db_session']
     issue_id = state['issue_id']

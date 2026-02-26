@@ -15,7 +15,7 @@ tools = [get_company_logo, get_person_thumbnail, get_fallback_image]
 chat_model = ai_factory.get_chat_model()
 research_agent = create_agent(chat_model, tools=tools, system_prompt=IMAGE_RESEARCHER_SYSTEM_PROMPT)
 
-async def image_researcher_node(state: AiArticleState):
+async def image_researcher(state: AiArticleState):
     """
     뉴스 기사의 핵심 엔티티를 파악하고, 최적의 참조 이미지를 검색하여 URL을 반환하는 에이전트 노드.
     설정에 따라 조건부로 실행됩니다.

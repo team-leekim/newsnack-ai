@@ -17,7 +17,7 @@ chat_model = ai_factory.get_chat_model()
 briefing_llm = chat_model.with_structured_output(BriefingResponse)
 
 
-async def fetch_daily_briefing_articles_node(state: TodayNewsnackState):
+async def fetch_articles(state: TodayNewsnackState):
     """지정된 이슈 ID에 해당하는 기사 조회 노드"""
     db: Session = state["db_session"]
     target_ids = state["target_issue_ids"]
@@ -52,7 +52,7 @@ async def fetch_daily_briefing_articles_node(state: TodayNewsnackState):
     return {"selected_articles": selected_articles}
 
 
-async def assemble_briefing_node(state: TodayNewsnackState):
+async def assemble_briefing(state: TodayNewsnackState):
     """구조화된 대본 생성 노드"""
     articles = state["selected_articles"]
 
@@ -78,7 +78,7 @@ async def assemble_briefing_node(state: TodayNewsnackState):
     return {"briefing_segments": segments}
 
 
-async def generate_audio_node(state: TodayNewsnackState):
+async def generate_audio(state: TodayNewsnackState):
     """단일 오디오 생성 및 타임라인 계산 노드"""
     segments = state["briefing_segments"]
     full_script = " ".join([s["script"] for s in segments])
@@ -108,7 +108,7 @@ async def generate_audio_node(state: TodayNewsnackState):
         raise ValueError(f"오디오 생성 실패: {e}") from e
 
 
-async def save_today_newsnack_node(state: TodayNewsnackState):
+async def save_today_newsnack(state: TodayNewsnackState):
     """생성된 오디오 및 타임라인 저장 노드"""
     db: Session = state["db_session"]
     audio_bytes = state["total_audio_bytes"]

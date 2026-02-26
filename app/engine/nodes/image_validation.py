@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 chat_model = ai_factory.get_chat_model()
 validator_llm = chat_model.with_structured_output(ImageValidationResponse)
 
-async def image_validator_node(state: AiArticleState):
+async def validate_image(state: AiArticleState):
     """
-    image_researcher_node에서 찾아낸 reference_image_url이 실제로
+    image_researcher에서 찾아낸 reference_image_url이 실제로
     문맥에 맞고 사용할 수 있는 유효한 이미지인지 멀티모달 모델을 통해 검증합니다.
     """
     final_url = state.get("reference_image_url")
