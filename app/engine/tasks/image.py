@@ -39,7 +39,7 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str) -
         return img
 
     except Exception as e:
-        logger.error(f"Error generating OpenAI image {idx}: {e}")
+        logger.error(f"[GenerateOpenaiImageTask] Error generating OpenAI image {idx}: {e}")
         raise
 
 
@@ -118,5 +118,5 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
             raise ValueError(f"No inline_data found in response parts for image {idx}")
 
     except Exception as e:
-        logger.error(f"Error generating image {idx}: {e}")
+        logger.error(f"[GenerateGoogleImageTask] Error generating image {idx}: {e}")
         raise

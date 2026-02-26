@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.database.models import Issue
-from app.engine.nodes.ai_article import analyze_article_node
-from app.engine.nodes.image_researcher import image_researcher_node
-from app.engine.nodes.image_validator import image_validator_node
+from app.engine.nodes.ai_article import analyze_article
+from app.engine.nodes.image_researcher import image_researcher
+from app.engine.nodes.image_validation import validate_image
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ class DebugService:
             "raw_article_context": merged_content,
             "raw_article_title": issue.title,
         }
-        state = await analyze_article_node(state)
+        state = await analyze_article(state)
 
-        research_result = await image_researcher_node(state)
+        research_result = await image_researcher(state)
         state.update(research_result)
         return state
 
@@ -62,7 +62,7 @@ class DebugService:
             state = await self._prepare_and_research_state(issue_id, db)
 
             # 이미지 검증 실행
-            validation_result = await image_validator_node(state)
+            validation_result = await validate_image(state)
             state.update(validation_result)
 
             # ImageValidationResponse가 포함된 상태를 반영하여 리턴합니다.

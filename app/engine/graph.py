@@ -1,17 +1,17 @@
 from langgraph.graph import StateGraph, END
 from .state import AiArticleState, TodayNewsnackState
 from .nodes import (
-    analyze_article_node,
-    select_editor_node,
-    content_creator_node,
-    image_gen_node,
-    save_ai_article_node,
-    fetch_daily_briefing_articles_node,
-    assemble_briefing_node,
-    generate_audio_node,
-    save_today_newsnack_node,
-    image_researcher_node,
-    image_validator_node,
+    analyze_article,
+    select_editor,
+    draft_article,
+    generate_images,
+    save_ai_article,
+    fetch_articles,
+    assemble_briefing,
+    generate_audio,
+    save_today_newsnack,
+    image_researcher,
+    validate_image,
 )
 from app.core.config import settings
 
@@ -19,34 +19,34 @@ from app.core.config import settings
 def create_ai_article_graph():
     workflow = StateGraph(AiArticleState)
 
-    # 1. 노드 등록
-    workflow.add_node("analyze_article", analyze_article_node)
-    workflow.add_node("image_researcher", image_researcher_node)
-    workflow.add_node("image_validator", image_validator_node)
-    workflow.add_node("select_editor", select_editor_node)
-    workflow.add_node("content_creator", content_creator_node)
-    workflow.add_node("image_gen", image_gen_node)
-    workflow.add_node("save_ai_article", save_ai_article_node)
+    # 노드 등록
+    workflow.add_node("analyze_article", analyze_article)
+    workflow.add_node("image_researcher", image_researcher)
+    workflow.add_node("validate_image", validate_image)
+    workflow.add_node("select_editor", select_editor)
+    workflow.add_node("draft_article", draft_article)
+    workflow.add_node("generate_images", generate_images)
+    workflow.add_node("save_ai_article", save_ai_article)
 
-    # 2. 시작점 설정
+    # 시작점 설정
     workflow.set_entry_point("analyze_article")
 
-    # 3. 엣지 연결
     def check_research_condition(_state: AiArticleState) -> str:
         if settings.AI_PROVIDER == "google" and settings.GOOGLE_IMAGE_WITH_REFERENCE:
             return "do_research"
         return "skip_research"
 
+    # 엣지 연결
     workflow.add_conditional_edges(
         "analyze_article",
         check_research_condition,
         {"do_research": "image_researcher", "skip_research": "select_editor"}
     )
-    workflow.add_edge("image_researcher", "image_validator")
-    workflow.add_edge("image_validator", "select_editor")
-    workflow.add_edge("select_editor", "content_creator")
-    workflow.add_edge("content_creator", "image_gen")
-    workflow.add_edge("image_gen", "save_ai_article")
+    workflow.add_edge("image_researcher", "validate_image")
+    workflow.add_edge("validate_image", "select_editor")
+    workflow.add_edge("select_editor", "draft_article")
+    workflow.add_edge("draft_article", "generate_images")
+    workflow.add_edge("generate_images", "save_ai_article")
     workflow.add_edge("save_ai_article", END)
 
     return workflow.compile()
@@ -56,10 +56,10 @@ def create_today_newsnack_graph():
     workflow = StateGraph(TodayNewsnackState)
 
     # 노드 등록
-    workflow.add_node("fetch_articles", fetch_daily_briefing_articles_node)
-    workflow.add_node("assemble_briefing", assemble_briefing_node)
-    workflow.add_node("generate_audio", generate_audio_node)
-    workflow.add_node("save_today_newsnack", save_today_newsnack_node)
+    workflow.add_node("fetch_articles", fetch_articles)
+    workflow.add_node("assemble_briefing", assemble_briefing)
+    workflow.add_node("generate_audio", generate_audio)
+    workflow.add_node("save_today_newsnack", save_today_newsnack)
 
     # 엣지 연결
     workflow.set_entry_point("fetch_articles")

@@ -44,14 +44,14 @@ async def get_company_logo(company_name_in_english: str) -> str:
                         if item.get("domain")
                     ]
                     if candidates:
-                        logger.info(f"[get_company_logo] Found {len(candidates)} candidates for: {company_name_in_english}")
+                        logger.info(f"[GetCompanyLogo] Found {len(candidates)} candidates for: {company_name_in_english}")
                         return json.dumps(candidates, ensure_ascii=False)
 
-            logger.warning(f"[get_company_logo] No candidates found for: {company_name_in_english}")
+            logger.warning(f"[GetCompanyLogo] No candidates found for: {company_name_in_english}")
             return "TOOL_FAILED: No brand candidates found. MUST try get_fallback_image instead."
 
         except Exception as e:
-            logger.error(f"[get_company_logo] API fetch failed: {e}")
+            logger.error(f"[GetCompanyLogo] API fetch failed: {e}")
             return f"TOOL_FAILED: Error occurred - {e}. MUST try get_fallback_image instead."
 
 
@@ -84,12 +84,12 @@ async def get_person_thumbnail(person_name: str) -> str:
                 headers=headers
             )
             if search_resp.status_code != 200:
-                logger.warning(f"[get_person_thumbnail] Search API failed for: {person_name} (status: {search_resp.status_code})")
+                logger.warning(f"[GetPersonThumbnail] Search API failed for: {person_name} (status: {search_resp.status_code})")
                 return "TOOL_FAILED: No Wikipedia page found. MUST try get_fallback_image."
 
             results = search_resp.json().get("query", {}).get("search", [])
             if not results:
-                logger.warning(f"[get_person_thumbnail] No search results for: {person_name}")
+                logger.warning(f"[GetPersonThumbnail] No search results for: {person_name}")
                 return "TOOL_FAILED: No Wikipedia page found. MUST try get_fallback_image."
 
             # 2단계: 각 검색 결과의 summary 조회 → 썸네일 추출
@@ -114,14 +114,14 @@ async def get_person_thumbnail(person_name: str) -> str:
                         })
 
             if not candidates:
-                logger.warning(f"[get_person_thumbnail] No thumbnails found in any search results for: {person_name}")
+                logger.warning(f"[GetPersonThumbnail] No thumbnails found in any search results for: {person_name}")
                 return "TOOL_FAILED: No Wikipedia thumbnails found for any candidates. MUST try get_fallback_image."
 
-            logger.info(f"[get_person_thumbnail] Found {len(candidates)} candidates for query: '{person_name}'")
+            logger.info(f"[GetPersonThumbnail] Found {len(candidates)} candidates for query: '{person_name}'")
             return json.dumps(candidates, ensure_ascii=False)
             
         except Exception as e:
-            logger.error(f"[get_person_thumbnail] API fetch failed: {e}")
+            logger.error(f"[GetPersonThumbnail] API fetch failed: {e}")
             return f"TOOL_FAILED: Error occurred - {e}. MUST try get_fallback_image."
 
 
@@ -158,14 +158,14 @@ async def get_fallback_image(query: str) -> str:
         try:
             response = await client.get(url, headers=headers, params=params)
             if response.status_code != 200:
-                logger.warning(f"[get_fallback_image] Failed to fetch. Status: {response.status_code}")
+                logger.warning(f"[GetFallbackImage] Failed to fetch. Status: {response.status_code}")
                 return f"TOOL_FAILED: Kakao API returned status {response.status_code}"
 
             data = response.json()
             documents = data.get("documents", [])
             
             if not documents:
-                logger.warning(f"[get_fallback_image] No images found for: {query}")
+                logger.warning(f"[GetFallbackImage] No images found for: {query}")
                 return "TOOL_FAILED: No general images found for the given query."
 
             candidates = [
@@ -177,9 +177,9 @@ async def get_fallback_image(query: str) -> str:
                 for doc in documents
             ]
             
-            logger.info(f"[get_fallback_image] Found {len(candidates)} image candidates for: {query}")
+            logger.info(f"[GetFallbackImage] Found {len(candidates)} image candidates for: {query}")
             return json.dumps(candidates, ensure_ascii=False)
 
         except Exception as e:
-            logger.error(f"[get_fallback_image] Fetch failed: {e}")
+            logger.error(f"[GetFallbackImage] Fetch failed: {e}")
             return f"TOOL_FAILED: Error occurred - {e}."

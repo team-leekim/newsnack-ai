@@ -4,8 +4,6 @@ import logging
 from typing import List
 from sqlalchemy.orm import Session
 from app.engine.graph import create_ai_article_graph, create_today_newsnack_graph
-from app.engine.nodes.ai_article import analyze_article_node
-from app.engine.nodes.image_researcher import image_researcher_node
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.database.models import Issue, Editor, Category, ProcessingStatusEnum
@@ -47,7 +45,7 @@ class WorkflowService:
             return occupied_ids
         except Exception as e:
             db.rollback()
-            logger.error(f"[Workflow] Error occupying issues: {e}")
+            logger.error(f"[AiArticleWorkflow] Error occupying issues: {e}")
             raise e
         finally:
             db.close()
@@ -61,7 +59,7 @@ class WorkflowService:
             async with self.semaphore:
                 await asyncio.sleep(settings.AI_ARTICLE_GENERATION_DELAY_SECONDS)
 
-                logger.info(f"[Batch] Starting issue {issue_id}")
+                logger.info(f"[AiArticleWorkflow] Starting issue {issue_id}")
                 await self.run_ai_article_pipeline(issue_id)
         
         # 모든 이슈에 대해 작업 생성 후 동시에 실행
@@ -110,12 +108,12 @@ class WorkflowService:
                 "image_urls": []
             }
 
-            logger.info(f"[Workflow] Starting pipeline for Issue {issue_id}")
+            logger.info(f"[AiArticleWorkflow] Starting pipeline for Issue {issue_id}")
 
             # LangGraph 실행
             await self.graph.ainvoke(initial_state)
 
-            logger.info(f"[Workflow] Finished for Issue {issue_id}")
+            logger.info(f"[AiArticleWorkflow] Finished for Issue {issue_id}")
 
         except Exception as e:
             # 실패 시 FAILED로 변경
@@ -124,7 +122,7 @@ class WorkflowService:
             if issue:
                 issue.processing_status = ProcessingStatusEnum.FAILED
                 db.commit()
-            logger.error(f"[Workflow] Error: {e}", exc_info=True)
+            logger.error(f"[AiArticleWorkflow] Error: {e}", exc_info=True)
             raise
         finally:
             db.close()
@@ -143,12 +141,12 @@ class WorkflowService:
                 "briefing_articles_data": []
             }
             
-            logger.info("[Workflow] Starting Today's Newsnack Pipeline")
+            logger.info("[TodayNewsnackWorkflow] Starting Today's Newsnack Pipeline")
             await self.newsnack_graph.ainvoke(initial_state)
-            logger.info("[Workflow] Today's Newsnack Pipeline Completed")
+            logger.info("[TodayNewsnackWorkflow] Today's Newsnack Pipeline Completed")
             
         except Exception as e:
-            logger.error(f"[Workflow] Error in Newsnack Pipeline: {e}", exc_info=True)
+            logger.error(f"[TodayNewsnackWorkflow] Error in Newsnack Pipeline: {e}", exc_info=True)
         finally:
             db.close()
 
