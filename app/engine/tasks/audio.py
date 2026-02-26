@@ -45,7 +45,7 @@ async def generate_google_audio_task(full_script: str):
         return audio_bytes
 
     except Exception as e:
-        logger.error(f"Error generating Google audio: {e}")
+        logger.error(f"[GenerateGoogleAudioTask] Error generating Google audio: {e}")
         raise
 
 
@@ -72,5 +72,5 @@ async def generate_openai_audio_task(full_script: str):
         return audio_bytes
 
     except Exception as e:
-        logger.error(f"Error generating OpenAI audio: {e}")
+        logger.error(f"[GenerateOpenaiAudioTask] Error generating OpenAI audio: {e}")
         raise

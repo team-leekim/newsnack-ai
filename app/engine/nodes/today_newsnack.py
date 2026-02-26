@@ -24,7 +24,7 @@ async def fetch_articles(state: TodayNewsnackState):
     selected_articles = []
 
     if not target_ids:
-        logger.warning("[TodayNewsnack] No target issue IDs provided.")
+        logger.warning("[FetchArticles] No target issue IDs provided.")
         return {"selected_articles": []}
 
     articles = (
@@ -46,9 +46,9 @@ async def fetch_articles(state: TodayNewsnackState):
                 "thumbnail_url": a.thumbnail_url
             })
         else:
-            logger.warning(f"[TodayNewsnack] Targeted AiArticle for Issue {issue_id} not found.")
+            logger.warning(f"[FetchArticles] Targeted AiArticle for Issue {issue_id} not found.")
 
-    logger.info(f"[TodayNewsnack] Fetched {len(selected_articles)} articles for briefing.")
+    logger.info(f"[FetchArticles] Fetched {len(selected_articles)} articles for briefing.")
     return {"selected_articles": selected_articles}
 
 
@@ -85,10 +85,10 @@ async def generate_audio(state: TodayNewsnackState):
 
     try:
         if settings.AI_PROVIDER == "openai":
-            logger.info("[AudioGen] Using OpenAI TTS")
+            logger.info("[GenerateAudio] Using OpenAI TTS")
             audio_bytes = await generate_openai_audio_task(full_script)
         else:
-            logger.info("[AudioGen] Using Google Gemini TTS")
+            logger.info("[GenerateAudio] Using Google Gemini TTS")
             audio_bytes = await generate_google_audio_task(full_script)
 
         duration = get_audio_duration_from_bytes(audio_bytes)
@@ -97,14 +97,14 @@ async def generate_audio(state: TodayNewsnackState):
 
         briefing_articles_data = calculate_article_timelines(segments, duration)
 
-        logger.info(f"[AudioGen] Successfully generated audio. Duration: {duration}s")
+        logger.info(f"[GenerateAudio] Successfully generated audio. Duration: {duration}s")
         return {
             "total_audio_bytes": audio_bytes,
             "briefing_articles_data": briefing_articles_data
         }
 
     except Exception as e:
-        logger.error(f"[AudioGen] Failed to generate audio after retries: {e}")
+        logger.error(f"[GenerateAudio] Failed to generate audio after retries: {e}")
         raise ValueError(f"오디오 생성 실패: {e}") from e
 
 
@@ -116,7 +116,7 @@ async def save_today_newsnack(state: TodayNewsnackState):
 
     file_path = await upload_audio_to_s3(audio_bytes)
     if not file_path:
-        logger.error("[TodayNewsnack] Audio upload failed.")
+        logger.error("[SaveTodayNewsnack] Audio upload failed.")
         raise ValueError("오디오 업로드에 실패했습니다.")
 
     new_snack = TodayNewsnack(
@@ -127,5 +127,5 @@ async def save_today_newsnack(state: TodayNewsnackState):
     db.add(new_snack)
     db.commit()
 
-    logger.info(f"[TodayNewsnack] Saved to DB. ID: {new_snack.id}, Path: {file_path}")
+    logger.info(f"[SaveTodayNewsnack] Saved to DB. ID: {new_snack.id}, Path: {file_path}")
     return state
