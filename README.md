@@ -39,7 +39,7 @@ sequenceDiagram
     participant Orchestrator as Orchestrator<br/>(Airflow)
     participant API as AI Server<br/>(FastAPI)
     participant Graph as AI Workflow<br/>(LangGraph)
-    participant Tools as Search Tools<br/>(Logo.dev/Wikipedia/Kakao)
+    participant Tools as Search Tools<br/>(Logo.dev/Wikipedia/Daum)
     participant LLM as LLM<br/>(Gemini/OpenAI)
     participant S3 as Storage<br/>(Amazon S3)
     participant DB as Database<br/>(Amazon RDS)
@@ -162,7 +162,7 @@ AI 프로바이더:
 
 검색 도구 API (선택. 이미지 리서치 기능 사용 시):
 - `LOGO_DEV_SECRET_KEY`, `LOGO_DEV_PUBLISHABLE_KEY`: 기업 로고 검색용 (Logo.dev)
-- `KAKAO_REST_API_KEY`: 기존 도구 실패 시 이미지 검색용 (Kakao)
+- `KAKAO_REST_API_KEY`: 기존 도구 실패 시 이미지 검색용 (Daum)
 
 모델 설정(선택):
 - `GOOGLE_CHAT_MODEL`, `OPENAI_CHAT_MODEL`

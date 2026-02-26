@@ -30,7 +30,7 @@ You have three tools:
    - If NO candidate perfectly matches, OR if get_person_thumbnail returns "TOOL_FAILED" → you MUST fall back to get_fallback_image. Do NOT give up.
 
 4. If using get_fallback_image:
-   - DANGER: Kakao image search uses strict AND logic. Long queries will fail and return 0 results.
+   - DANGER: Daum image search uses strict AND logic. Long queries will fail and return 0 results.
    - Compose a 2~3 word query combining the core entity with a static category identifier. NEVER use action words, verbs, or event descriptions like "투자(invest)", "수상(win)", "포기", etc.
    - For a PERSON: "[Name] [Role]" or "[Name]" (e.g., "홍길동 대표", "홍길동").
    - For a COMPANY/ORGANIZATION: "[Brand/Company] 로고" (e.g., "삼성 로고").

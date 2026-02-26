@@ -129,7 +129,7 @@ async def get_person_thumbnail(person_name: str) -> str:
 async def get_fallback_image(query: str) -> str:
     """
     다른 툴(get_company_logo, get_person_thumbnail)이 TOOL_FAILED를 반환했을 때 사용하는 최후의 폴백 도구입니다.
-    카카오 이미지 검색을 사용하여 국내 로컬 뉴스/기업/인물 이미지를 빠르고 정확하게 찾아냅니다.
+    Daum 이미지 검색을 사용하여 국내 로컬 뉴스/기업/인물 이미지를 빠르고 정확하게 찾아냅니다.
     
     [중요 지침]
     - 오직 기사의 **핵심 인물명** 또는 **핵심 기관/기업명**에만 집중하여 검색하세요.
@@ -159,7 +159,7 @@ async def get_fallback_image(query: str) -> str:
             response = await client.get(url, headers=headers, params=params)
             if response.status_code != 200:
                 logger.warning(f"[GetFallbackImage] Failed to fetch. Status: {response.status_code}")
-                return f"TOOL_FAILED: Kakao API returned status {response.status_code}"
+                return f"TOOL_FAILED: Daum Search API returned status {response.status_code}"
 
             data = response.json()
             documents = data.get("documents", [])
