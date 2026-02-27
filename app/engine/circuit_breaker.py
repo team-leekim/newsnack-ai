@@ -29,7 +29,7 @@ def with_circuit_breaker(
             # 1. 서킷 상태 확인
             status = await redis_client.get(status_key)
             if status == "OPEN":
-                # 서킷이 닫혀있으므로 바로 Fallback 인자로 교체 후 우회 호출
+                # 서킷이 열려있으므로 바로 Fallback 인자로 교체 후 우회 호출
                 logger.warning(f"[{circuit_id}] Server is down. Routing to Fallback Model.")
                 if fallback_kwargs:
                     kwargs.update(fallback_kwargs)
