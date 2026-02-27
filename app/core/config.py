@@ -36,8 +36,9 @@ class Settings(BaseSettings):
     LOGO_DEV_PUBLISHABLE_KEY: Optional[str] = None
     KAKAO_REST_API_KEY: Optional[str] = None
     
-    # Database & Storage
+    # Infra
     DB_URL: str
+    REDIS_URL: str = "redis://localhost:6379/0"
     AWS_REGION: str = "ap-northeast-2"
     AWS_S3_BUCKET: str
     AWS_ACCESS_KEY_ID: str
