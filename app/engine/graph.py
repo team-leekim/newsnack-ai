@@ -31,17 +31,8 @@ def create_ai_article_graph():
     # 시작점 설정
     workflow.set_entry_point("analyze_article")
 
-    def check_research_condition(_state: AiArticleState) -> str:
-        if settings.AI_PROVIDER == "google" and settings.GOOGLE_IMAGE_WITH_REFERENCE:
-            return "do_research"
-        return "skip_research"
-
     # 엣지 연결
-    workflow.add_conditional_edges(
-        "analyze_article",
-        check_research_condition,
-        {"do_research": "image_researcher", "skip_research": "select_editor"}
-    )
+    workflow.add_edge("analyze_article", "image_researcher")
     workflow.add_edge("image_researcher", "validate_image")
     workflow.add_edge("validate_image", "select_editor")
     workflow.add_edge("select_editor", "draft_article")
