@@ -1,6 +1,7 @@
 import logging
 from functools import wraps
 from typing import Callable, List, Optional
+
 from app.core.redis import RedisClient
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ def with_circuit_breaker(
     target_errors: List[str] = ["503", "500", "429"],
     failure_threshold: int = 2,
     recovery_timeout_secs: int = 180,
+    failure_window_secs: int = 600,
 ):
     """
     서킷 브레이커 + 폴백 라우터 통합 데코레이터
@@ -56,7 +58,7 @@ def with_circuit_breaker(
                 # 타깃 에러 발생 시 실패 카운트 누적
                 fail_count = await redis_client.incr(count_key)
                 if fail_count == 1:
-                    await redis_client.expire(count_key, 600) # 10분 동안 누적 카운트 유지
+                    await redis_client.expire(count_key, failure_window_secs)
 
                 logger.warning(f"[{circuit_id}] Target error detected: {e}. Fail count: {fail_count}/{failure_threshold}")
 
