@@ -15,7 +15,7 @@ env:
   AWS_REGION: ap-northeast-2
   ECR_REPOSITORY: newsnack-ai
   CONTAINER_NAME: newsnack-ai
-  DOCKER_NETWORK_NAME: newsnack-internal
+  DOCKER_NETWORK_NAME: newsnack-network
 
 jobs:
   build-and-push:
@@ -98,6 +98,7 @@ jobs:
               -e GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
+              -e REDIS_URL="${{ secrets.REDIS_URL }}" \
               -e AWS_REGION="${{ secrets.AWS_REGION }}" \
               -e AWS_S3_BUCKET="${{ secrets.AWS_S3_BUCKET }}" \
               -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
