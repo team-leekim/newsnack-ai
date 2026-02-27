@@ -6,7 +6,7 @@ from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ..providers import ai_factory
-from ..prompts import ImageStyle, create_image_prompt, create_google_image_prompt
+from ..prompts import ImageStyle, create_image_prompt
 from app.core.config import settings
 from app.utils.image import pil_to_base64
 
@@ -21,7 +21,15 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str, r
     """OpenAI를 사용한 개별 이미지 생성 (재시도 및 참조 지원)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
-    final_prompt = create_image_prompt(style, prompt)
+    
+    ref_image_provided = bool(ref_image is not None)
+    final_prompt = create_image_prompt(
+        style=style, 
+        prompt=prompt, 
+        content_type=content_type, 
+        ref_image_provided=ref_image_provided,
+        ref_type=ref_type
+    )
 
     try:
         if ref_image:
@@ -84,10 +92,12 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
 
-    final_prompt = create_google_image_prompt(
+    ref_image_provided = bool(ref_image is not None)
+    final_prompt = create_image_prompt(
         style=style,
         prompt=prompt,
         content_type=content_type,
+        ref_image_provided=ref_image_provided,
         ref_type=ref_type
     )
     contents = [final_prompt]
