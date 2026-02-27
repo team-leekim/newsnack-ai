@@ -8,6 +8,7 @@ from ..providers import ai_factory
 from ..prompts import ImageStyle, create_image_prompt
 from app.core.config import settings
 from app.utils.image import pil_to_base64, base64_to_pil
+from app.engine.circuit_breaker import with_circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
     wait=wait_random_exponential(multiplier=1, min=2, max=10)
 )
 async def generate_openai_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style") -> Image.Image:
-    """OpenAI를 사용한 개별 이미지 생성 (재시도 및 참조 지원)"""
+    """OpenAI를 사용한 개별 이미지 생성 (참조/재시도 지원)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
     
@@ -75,8 +76,17 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str, r
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=1, min=2, max=10)
 )
-async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style") -> Image.Image:
-    """Gemini를 사용한 개별 이미지 생성 (재시도 및 참조 지원)"""
+@with_circuit_breaker(
+    circuit_id="google_image_api",
+    fallback_kwargs={
+        "override_model_name": settings.GOOGLE_IMAGE_MODEL_FALLBACK,
+        "override_image_size": settings.GOOGLE_IMAGE_MODEL_FALLBACK_SIZE
+    },
+    failure_threshold=2
+)
+async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style",
+                                     override_model_name: str = None, override_image_size: str = None) -> Image.Image:
+    """Gemini를 사용한 개별 이미지 생성 (참조/재시도/서킷 브레이커 지원)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
 
@@ -93,8 +103,8 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
     if ref_image:
         contents.append(ref_image)
 
-    model_name = settings.GOOGLE_IMAGE_MODEL_PRIMARY
-    image_size = settings.GOOGLE_IMAGE_MODEL_PRIMARY_SIZE
+    model_name = override_model_name or settings.GOOGLE_IMAGE_MODEL_PRIMARY
+    image_size = override_image_size or settings.GOOGLE_IMAGE_MODEL_PRIMARY_SIZE
     
     config_params = {
         "aspect_ratio": settings.GOOGLE_IMAGE_ASPECT_RATIO,
