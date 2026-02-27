@@ -26,6 +26,7 @@ class RedisClient:
                 logger.info("Redis connection successfully established.")
             except Exception as e:
                 logger.error(f"Failed to connect to Redis: {e}")
+                cls._instance = None
                 raise e
 
         return cls._instance
