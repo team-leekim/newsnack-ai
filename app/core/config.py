@@ -17,7 +17,14 @@ class Settings(BaseSettings):
     GOOGLE_TTS_MODEL: str = "gemini-2.5-flash-preview-tts"
     OPENAI_TTS_MODEL: str = "gpt-4o-mini-tts"
 
-    # TTS Settings
+    # Image Options
+    GOOGLE_IMAGE_ASPECT_RATIO: str = "1:1"
+    GOOGLE_IMAGE_MODEL_PRIMARY_SIZE: str = "512px"
+    GOOGLE_IMAGE_MODEL_FALLBACK_SIZE: str = "1K"
+    OPENAI_IMAGE_SIZE: str = "1024x1024"
+    OPENAI_IMAGE_QUALITY: str = "low"
+
+    # TTS Options
     GOOGLE_TTS_VOICE: str = "Achird"
     OPENAI_TTS_VOICE: str = "marin"
 

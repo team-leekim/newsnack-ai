@@ -1,4 +1,3 @@
-import base64
 import logging
 from io import BytesIO
 from PIL import Image
@@ -50,7 +49,8 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str, r
             tools=[{
                 "type": "image_generation",
                 "action": "auto",
-                "quality": "low",
+                "quality": settings.OPENAI_IMAGE_QUALITY,
+                "size": settings.OPENAI_IMAGE_SIZE,
             }],
         )
         
@@ -94,8 +94,12 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
         contents.append(ref_image)
 
     model_name = settings.GOOGLE_IMAGE_MODEL_PRIMARY
-    config_params = {"aspect_ratio": "1:1"}
-    config_params["image_size"] = "512px" if "flash" in model_name else "1K"
+    image_size = settings.GOOGLE_IMAGE_MODEL_PRIMARY_SIZE
+    
+    config_params = {
+        "aspect_ratio": settings.GOOGLE_IMAGE_ASPECT_RATIO,
+        "image_size": image_size
+    }
     image_config = types.ImageConfig(**config_params)
 
     try:
