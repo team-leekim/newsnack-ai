@@ -1,14 +1,13 @@
-import base64
 import logging
 from io import BytesIO
-
 from PIL import Image
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ..providers import ai_factory
-from ..prompts import ImageStyle, create_image_prompt, create_google_image_prompt
+from ..prompts import ImageStyle, create_image_prompt
 from app.core.config import settings
+from app.utils.image import pil_to_base64, base64_to_pil
 
 logger = logging.getLogger(__name__)
 
@@ -17,26 +16,55 @@ logger = logging.getLogger(__name__)
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=1, min=2, max=10)
 )
-async def generate_openai_image_task(idx: int, prompt: str, content_type: str) -> Image.Image:
-    """OpenAI를 사용한 개별 이미지 생성 (재시도 포함)"""
+async def generate_openai_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style") -> Image.Image:
+    """OpenAI를 사용한 개별 이미지 생성 (재시도 및 참조 지원)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
-    final_prompt = create_image_prompt(style, prompt)
+    
+    ref_image_provided = bool(ref_image is not None)
+    final_prompt = create_image_prompt(
+        style=style, 
+        prompt=prompt, 
+        content_type=content_type, 
+        ref_image_provided=ref_image_provided,
+        ref_type=ref_type
+    )
 
     try:
-        response = await client.images.generate(
-            model=settings.OPENAI_IMAGE_MODEL,
-            prompt=final_prompt,
-            n=1,
-            quality="low",
-            size="1024x1024"
+        content_items = [{"type": "input_text", "text": final_prompt}]
+        
+        if ref_image:
+            b64_img = pil_to_base64(ref_image, "PNG")
+            content_items.append({
+                "type": "input_image",
+                "image_url": f"data:image/png;base64,{b64_img}"
+            })
+
+        response = await client.responses.create(
+            model=settings.OPENAI_CHAT_MODEL,
+            input=[{
+                "role": "user",
+                "content": content_items
+            }],
+            tools=[{
+                "type": "image_generation",
+                "action": "auto",
+                "quality": settings.OPENAI_IMAGE_QUALITY,
+                "size": settings.OPENAI_IMAGE_SIZE,
+            }],
         )
+        
+        image_generation_calls = [
+            output for output in response.output
+            if output.type == "image_generation_call"
+        ]
+        
+        if not image_generation_calls:
+            raise ValueError(f"No image_generation_call found in response for image {idx}")
+            
+        b64_data = image_generation_calls[0].result
 
-        b64_data = response.data[0].b64_json
-        img_data = base64.b64decode(b64_data)
-        img = Image.open(BytesIO(img_data))
-
-        return img
+        return base64_to_pil(b64_data)
 
     except Exception as e:
         logger.error(f"[GenerateOpenaiImageTask] Error generating OpenAI image {idx}: {e}")
@@ -48,75 +76,72 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str) -
     wait=wait_random_exponential(multiplier=1, min=2, max=10)
 )
 async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style") -> Image.Image:
-    """Gemini를 사용한 개별 이미지 생성 (재시도 포함, 메모리 기반 참조)"""
+    """Gemini를 사용한 개별 이미지 생성 (재시도 및 참조 지원)"""
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
 
-    with_reference = bool(ref_image is not None)
-    final_prompt = create_google_image_prompt(
+    ref_image_provided = bool(ref_image is not None)
+    final_prompt = create_image_prompt(
         style=style,
         prompt=prompt,
         content_type=content_type,
-        with_reference=with_reference,
+        ref_image_provided=ref_image_provided,
         ref_type=ref_type
     )
     contents = [final_prompt]
 
-    if with_reference:
+    if ref_image:
         contents.append(ref_image)
 
-    image_model = (
-        settings.GOOGLE_IMAGE_MODEL_WITH_REFERENCE
-        if settings.GOOGLE_IMAGE_WITH_REFERENCE
-        else settings.GOOGLE_IMAGE_MODEL
-    )
-
-    config_params = {"aspect_ratio": "1:1"}
-    if settings.GOOGLE_IMAGE_WITH_REFERENCE:
-        config_params["image_size"] = "1K"
+    model_name = settings.GOOGLE_IMAGE_MODEL_PRIMARY
+    image_size = settings.GOOGLE_IMAGE_MODEL_PRIMARY_SIZE
+    
+    config_params = {
+        "aspect_ratio": settings.GOOGLE_IMAGE_ASPECT_RATIO,
+        "image_size": image_size
+    }
     image_config = types.ImageConfig(**config_params)
 
     try:
         response = await client.aio.models.generate_content(
-            model=image_model,
+            model=model_name,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=['IMAGE'],
                 image_config=image_config
             )
         )
-        
-        if not response.parts:
-            reason = "UNKNOWN"
-            
-            # Check if it was blocked at the prompt level
-            prompt_feedback = getattr(response, 'prompt_feedback', None)
-            if prompt_feedback and getattr(prompt_feedback, 'block_reason', None):
-                block_reason = prompt_feedback.block_reason
-                reason = f"PROMPT_BLOCKED ({getattr(block_reason, 'name', str(block_reason))})"
-                message = getattr(prompt_feedback, 'block_reason_message', None)
-                if message:
-                    reason += f" - {message}"
-                
-            # Check if it was blocked at the candidate level
-            elif getattr(response, 'candidates', None):
-                candidate = response.candidates[0]
-                finish_reason = getattr(candidate, 'finish_reason', None)
-                if finish_reason:
-                    reason = getattr(finish_reason, 'name', str(finish_reason))
-                    finish_message = getattr(candidate, 'finish_message', None)
-                    if finish_message:
-                        reason += f" - {finish_message}"
-                    
-            raise ValueError(f"Gemini API returned empty parts for image {idx}. Reason: {reason}")
-
-        img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
-        if img_part:
-            img = Image.open(BytesIO(img_part.data))
-            return img
-        else:
-            raise ValueError(f"No inline_data found in response parts for image {idx}")
-
     except Exception as e:
         logger.error(f"[GenerateGoogleImageTask] Error generating image {idx}: {e}")
         raise
+
+    if not response.parts:
+        reason = "UNKNOWN"
+        
+        # Check if it was blocked at the prompt level
+        prompt_feedback = getattr(response, 'prompt_feedback', None)
+        if prompt_feedback and getattr(prompt_feedback, 'block_reason', None):
+            block_reason = prompt_feedback.block_reason
+            reason = f"PROMPT_BLOCKED ({getattr(block_reason, 'name', str(block_reason))})"
+            message = getattr(prompt_feedback, 'block_reason_message', None)
+            if message:
+                reason += f" - {message}"
+            
+        # Check if it was blocked at the candidate level
+        elif getattr(response, 'candidates', None):
+            candidate = response.candidates[0]
+            finish_reason = getattr(candidate, 'finish_reason', None)
+            if finish_reason:
+                reason = getattr(finish_reason, 'name', str(finish_reason))
+                finish_message = getattr(candidate, 'finish_message', None)
+                if finish_message:
+                    reason += f" - {finish_message}"
+                
+        raise ValueError(f"Gemini API returned empty parts for image {idx}. Reason: {reason}")
+
+    img_part = next((part.inline_data for part in response.parts if part.inline_data), None)
+    if img_part:
+        img = Image.open(BytesIO(img_part.data))
+        return img
+    else:
+        raise ValueError(f"No inline_data found in response parts for image {idx}")

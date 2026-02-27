@@ -308,38 +308,24 @@ class ImageStyle:
             raise ValueError(f"Unknown content_type: {content_type}")
 
 
-def create_image_prompt(style: str, prompt: str, language: str = "Korean") -> str:
-    """이미지 생성 프롬프트 조합
+def create_image_prompt(
+    style: str,
+    prompt: str,
+    content_type: str,
+    ref_image_provided: bool = False,
+    ref_type: str = "style"
+) -> str:
+    """이미지 생성 프롬프트 조합 (통합)
     
     Args:
         style: 이미지 스타일 (ImageStyle.WEBTOON 또는 ImageStyle.CARD_NEWS)
         prompt: 기본 프롬프트
-        language: 텍스트 언어 (기본값: Korean)
-    
-    Returns:
-        최종 이미지 생성 프롬프트
-    """
-    return f"{style} {prompt}. Ensure all text is in {language} if any."
-
-
-def create_google_image_prompt(
-    style: str,
-    prompt: str,
-    content_type: str,
-    with_reference: bool = False,
-    ref_type: str = "style"
-) -> str:
-    """Google Gemini 이미지 생성 전용 프롬프트
-    
-    Args:
-        style: 이미지 스타일
-        prompt: 기본 프롬프트
         content_type: 콘텐츠 타입 (WEBTOON/CARD_NEWS)
-        with_reference: 참조 이미지 사용 여부
+        ref_image_provided: 참조 이미지가 실제로 제공되었는지 여부
         ref_type: 참조 목적 ("style" = 앵커 이미지를 보고 화풍 유지, "content" = 대상을 보고 피사체로 참고)
     
     Returns:
-        최종 프롬프트
+        최종 이미지 생성 프롬프트
     """
     instruction = (
         "Write all text for Korean readers. "
@@ -352,7 +338,7 @@ def create_google_image_prompt(
     
     final_prompt = f"{style} {prompt}. {instruction}"
     
-    if with_reference:
+    if ref_image_provided:
         if ref_type == "style":
             final_prompt += (
                 " Use the reference image ONLY to maintain character/style consistency. "

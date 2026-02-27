@@ -97,7 +97,6 @@ jobs:
               -e AI_PROVIDER="${{ secrets.AI_PROVIDER }}" \
               -e GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              -e GOOGLE_IMAGE_WITH_REFERENCE="${{ secrets.GOOGLE_IMAGE_WITH_REFERENCE }}" \
               -e DB_URL="${{ secrets.DB_URL }}" \
               -e AWS_REGION="${{ secrets.AWS_REGION }}" \
               -e AWS_S3_BUCKET="${{ secrets.AWS_S3_BUCKET }}" \

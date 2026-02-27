@@ -19,15 +19,15 @@ async def validate_image(state: AiArticleState):
     문맥에 맞고 사용할 수 있는 유효한 이미지인지 멀티모달 모델을 통해 검증합니다.
     """
     final_url = state.get("reference_image_url")
-    if final_url:
-        final_url = final_url.strip('.,;:\'\"()[]{}<>')
-        
-    title = state.get("final_title", "")
-    summary = " ".join(state.get("summary", []))
 
     if not final_url:
         logger.info("[ValidateImage] No reference_image_url provided. Skipping validation.")
         return {"reference_image_url": None}
+
+    final_url = final_url.strip('.,;:\'\"()[]{}<>')
+
+    title = state.get("final_title", "")
+    summary = " ".join(state.get("summary", []))
 
     logger.info(f"[ValidateImage] Validating Reference URL: {final_url}")
     

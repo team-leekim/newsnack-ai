@@ -71,24 +71,15 @@ sequenceDiagram
 ```mermaid
 graph TD
     Start[시작] --> Analyze[뉴스 분석<br/>analyze_article]
-    Analyze --> |제목/요약/타입 결정| CheckResearch{리서치 여부}
+    Analyze --> |제목/요약/타입 결정| ImageResearcher[이미지 리서치<br/>image_researcher]
     
-    CheckResearch --> |Google 참조 가능| ImageResearcher[이미지 리서치<br/>image_researcher]
     ImageResearcher --> |찾은 이미지| ImageValidator[이미지 검증<br/>validate_image]
     ImageValidator --> |검증 완료| SelectEditor[에디터 선정<br/>select_editor]
     
-    CheckResearch --> |리서치 스킵| SelectEditor
     SelectEditor --> |카테고리 매칭 or 랜덤| ContentCreator[본문 생성<br/>draft_article]
     ContentCreator --> |본문 + 이미지 프롬프트 4개| ImageGen[이미지 생성<br/>generate_images]
     
-    ImageGen --> |생성 전략| ImageStrategy{프로바이더 / 설정}
-    ImageStrategy --> |OpenAI| OpenAI[4장 개별 생성]
-    ImageStrategy --> |Google + 스타일 일관성 OFF| GoogleNoRef[4장 개별 생성]
-    ImageStrategy --> |Google + 스타일 일관성 ON| GoogleRef[1장 생성 후<br/>나머지 3장에 스타일 적용]
-    
-    OpenAI --> Save[DB 저장<br/>save_ai_article]
-    GoogleRef --> Save
-    GoogleNoRef --> Save
+    ImageGen --> Save[DB 저장<br/>save_ai_article]
     
     Save --> |ai_article + reaction_count<br/>issue.is_processed = true| End[종료]
 ```
@@ -100,8 +91,7 @@ graph TD
 - `select_editor`: 이슈의 카테고리와 일치하는 에디터 배정 (없으면 랜덤)
 - `draft_article`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성 (콘텐츠 타입에 따라 웹툰/카드뉴스 스타일 내부 분기)
 - `generate_images`: 프로바이더 설정에 따라 최종 이미지 4장 생성
-  - OpenAI 및 Google(스타일 일관성 OFF): 각 컷을 개별적으로 병렬 생성
-  - Google(스타일 일관성 ON): 컷 간 작화 유지를 위해 1장을 기준 이미지로 선 생성 후, 나머지 3장은 이를 **'스타일'로 참조**하여 생성
+  - 컷 간 작화 유지를 위해 1장을 기준 이미지로 선 생성 후, 나머지 3장은 이를 **'스타일'로 참조**하여 병렬 생성
   - *참고: 만약 `image_researcher`에서 찾은 이미지(실사, 로고 등)가 있다면, 1장(기준) 생성 단계에서 이를 **'내용(Content)'으로 추가 참조**하여 기사 맥락을 반영함*
 - `save_ai_article`: ai_article 테이블 저장, reaction_count 초기화, 이슈 처리 상태 업데이트
 
@@ -164,11 +154,6 @@ AI 프로바이더:
 - `LOGO_DEV_SECRET_KEY`, `LOGO_DEV_PUBLISHABLE_KEY`: 기업 로고 검색용 (Logo.dev)
 - `KAKAO_REST_API_KEY`: 기존 도구 실패 시 이미지 검색용 (Daum)
 
-모델 설정(선택):
-- `GOOGLE_CHAT_MODEL`, `OPENAI_CHAT_MODEL`
-- `GOOGLE_IMAGE_MODEL`, `GOOGLE_IMAGE_MODEL_WITH_REFERENCE`, `OPENAI_IMAGE_MODEL`
-- `GOOGLE_TTS_MODEL`, `OPENAI_TTS_MODEL`
-
 ## 로컬 실행
 
 ```bash
@@ -181,7 +166,6 @@ uvicorn app.main:app --reload
 ## 참고
 
 - 프로바이더 전환: `AI_PROVIDER=openai`
-- 참조 이미지 모드: `GOOGLE_IMAGE_WITH_REFERENCE=true`
 
 <!-- MARKDOWN LINKS & IMAGES -->
 [FastAPI]: https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white

@@ -107,56 +107,44 @@ async def generate_images(state: AiArticleState):
     images = []
 
     try:
-        if settings.AI_PROVIDER == "google" and settings.GOOGLE_IMAGE_WITH_REFERENCE:
-            logger.info(f"[GenerateImages] Using Gemini (reference) for {content_key}")
-
-            agent_ref_image = None
-            ref_url = state.get("reference_image_url")
-            if ref_url:
-                agent_ref_image = await download_image_from_url(ref_url)
-                if agent_ref_image:
-                    logger.info("[GenerateImages] Successfully downloaded agent reference image")
-                else:
-                    logger.warning("[GenerateImages] Failed to download agent reference image from URL")
-
-            if agent_ref_image:
-                logger.info(f"[GenerateImages] Generating anchor image based on Agent's content reference.")
-                # 0번 이미지는 에이전트의 실사 이미지를 '내용(content)'으로 참조하여 생성
-                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=agent_ref_image, ref_type="content")
-            else:
-                logger.info(f"[GenerateImages] No agent reference image. Generating anchor image first.")
-                anchor_image = await generate_google_image_task(0, prompts[0], content_type, ref_image=None)
-            
-            images.append(anchor_image)
-
-            logger.info(f"[GenerateImages] Generating remaining images based on anchor image's style.")
-            # 1~3번 이미지는 방금 만든 0번 이미지(만화풍)를 '스타일(style)'로 참조하여 생성
-            tasks = [
-                generate_google_image_task(i, prompts[i], content_type, ref_image=anchor_image, ref_type="style")
-                for i in range(1, 4)
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            for i, result in enumerate(results, start=1):
-                if isinstance(result, Exception):
-                    raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
-                images.append(result)
-
+        logger.info(f"[GenerateImages] Using {settings.AI_PROVIDER} for {content_key}")
+        
+        if settings.AI_PROVIDER == "openai":
+            task_func = generate_openai_image_task
         else:
-            if settings.AI_PROVIDER == "openai":
-                logger.info(f"[GenerateImages] Using OpenAI for {content_key}")
-                task_func = generate_openai_image_task
+            task_func = generate_google_image_task
+
+        agent_ref_image = None
+        ref_url = state.get("reference_image_url")
+        if ref_url:
+            agent_ref_image = await download_image_from_url(ref_url)
+            if agent_ref_image:
+                logger.info("[GenerateImages] Successfully downloaded agent reference image")
             else:
-                logger.info(f"[GenerateImages] Using Gemini (no reference) for {content_key}")
-                task_func = generate_google_image_task
+                logger.warning("[GenerateImages] Failed to download agent reference image from URL")
 
-            tasks = [task_func(i, prompts[i], content_type) for i in range(4)]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        if agent_ref_image:
+            logger.info(f"[GenerateImages] Generating anchor image based on Agent's content reference.")
+            # 0번 이미지는 에이전트의 실사 이미지를 '내용(content)'으로 참조하여 생성
+            anchor_image = await task_func(0, prompts[0], content_type, ref_image=agent_ref_image, ref_type="content")
+        else:
+            logger.info(f"[GenerateImages] No agent reference image. Generating anchor image first.")
+            anchor_image = await task_func(0, prompts[0], content_type, ref_image=None)
+        
+        images.append(anchor_image)
 
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
-                images.append(result)
+        logger.info(f"[GenerateImages] Generating remaining images based on anchor image's style.")
+        # 1~3번 이미지는 방금 만든 0번 이미지(만화풍)를 '스타일(style)'로 참조하여 생성
+        tasks = [
+            task_func(i, prompts[i], content_type, ref_image=anchor_image, ref_type="style")
+            for i in range(1, 4)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for i, result in enumerate(results, start=1):
+            if isinstance(result, Exception):
+                raise ValueError(f"이미지 {i} 생성 실패: {result}") from result
+            images.append(result)
 
         logger.info(f"[GenerateImages] All 4 images generated successfully. Uploading to S3...")
         image_urls = []
