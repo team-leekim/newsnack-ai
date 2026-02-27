@@ -8,7 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 from ..providers import ai_factory
 from ..prompts import ImageStyle, create_image_prompt
 from app.core.config import settings
-from app.utils.image import pil_to_base64
+from app.utils.image import pil_to_base64, base64_to_pil
 
 logger = logging.getLogger(__name__)
 
@@ -32,51 +32,39 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str, r
     )
 
     try:
+        content_items = [{"type": "input_text", "text": final_prompt}]
+        
         if ref_image:
             b64_img = pil_to_base64(ref_image, "PNG")
-            input_content = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": final_prompt},
-                        {
-                            "type": "input_image",
-                            "image_url": f"data:image/png;base64,{b64_img}"
-                        }
-                    ]
-                }
-            ]
-            response = await client.responses.create(
-                model=settings.OPENAI_IMAGE_MODEL,
-                input=input_content,
-                tools=[{"type": "image_generation"}],
-            )
-            image_generation_calls = [
-                output for output in response.output
-                if output.type == "image_generation_call"
-            ]
+            content_items.append({
+                "type": "input_image",
+                "image_url": f"data:image/png;base64,{b64_img}"
+            })
+
+        response = await client.responses.create(
+            model=settings.OPENAI_CHAT_MODEL,
+            input=[{
+                "role": "user",
+                "content": content_items
+            }],
+            tools=[{
+                "type": "image_generation",
+                "action": "auto",
+                "quality": "low",
+            }],
+        )
+        
+        image_generation_calls = [
+            output for output in response.output
+            if output.type == "image_generation_call"
+        ]
+        
+        if not image_generation_calls:
+            raise ValueError(f"No image_generation_call found in response for image {idx}")
             
-            if not image_generation_calls:
-                raise ValueError(f"No image_generation_call found in response for image {idx}")
-                
-            b64_data = image_generation_calls[0].result
-            img_data = base64.b64decode(b64_data)
-            img = Image.open(BytesIO(img_data))
-            return img
-        else:
-            response = await client.images.generate(
-                model=settings.OPENAI_IMAGE_MODEL,
-                prompt=final_prompt,
-                n=1,
-                quality="low",
-                size="1024x1024"
-            )
+        b64_data = image_generation_calls[0].result
 
-            b64_data = response.data[0].b64_json
-            img_data = base64.b64decode(b64_data)
-            img = Image.open(BytesIO(img_data))
-
-            return img
+        return base64_to_pil(b64_data)
 
     except Exception as e:
         logger.error(f"[GenerateOpenaiImageTask] Error generating OpenAI image {idx}: {e}")

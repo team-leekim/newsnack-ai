@@ -45,6 +45,12 @@ def pil_to_base64(img: Image.Image, img_format: str = "PNG") -> str:
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
+def base64_to_pil(b64_str: str) -> Image.Image:
+    """base64 문자열을 PIL Image로 변환합니다."""
+    img_data = base64.b64decode(b64_str)
+    return Image.open(io.BytesIO(img_data))
+
+
 async def upload_image_to_s3(content_key: str, idx: int, img: Image.Image) -> Optional[str]:
     """이미지를 S3에 바로 업로드"""
     s3_key = f"images/{content_key}/{idx}.png"

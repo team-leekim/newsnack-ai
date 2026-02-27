@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     OPENAI_CHAT_MODEL: str = "gpt-5-nano"
     GOOGLE_IMAGE_MODEL_PRIMARY: str = "gemini-3.1-flash-image-preview"
     GOOGLE_IMAGE_MODEL_FALLBACK: str = "gemini-3-pro-image-preview"
-    OPENAI_IMAGE_MODEL: str = "gpt-image-1.5"
     GOOGLE_TTS_MODEL: str = "gemini-2.5-flash-preview-tts"
     OPENAI_TTS_MODEL: str = "gpt-4o-mini-tts"
 
