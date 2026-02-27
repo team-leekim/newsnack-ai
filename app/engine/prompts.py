@@ -326,7 +326,6 @@ def create_google_image_prompt(
     style: str,
     prompt: str,
     content_type: str,
-    with_reference: bool = False,
     ref_type: str = "style"
 ) -> str:
     """Google Gemini 이미지 생성 전용 프롬프트
@@ -335,7 +334,6 @@ def create_google_image_prompt(
         style: 이미지 스타일
         prompt: 기본 프롬프트
         content_type: 콘텐츠 타입 (WEBTOON/CARD_NEWS)
-        with_reference: 참조 이미지 사용 여부
         ref_type: 참조 목적 ("style" = 앵커 이미지를 보고 화풍 유지, "content" = 대상을 보고 피사체로 참고)
     
     Returns:
@@ -352,16 +350,15 @@ def create_google_image_prompt(
     
     final_prompt = f"{style} {prompt}. {instruction}"
     
-    if with_reference:
-        if ref_type == "style":
-            final_prompt += (
-                " Use the reference image ONLY to maintain character/style consistency. "
-                "IGNORE its composition and pose."
-            )
-        elif ref_type == "content":
-            final_prompt += (
-                " Use the reference image to accurately depict the main subject (e.g., specific logo, person's face). "
-                "Draw it in the requested art style."
-            )
+    if ref_type == "style":
+        final_prompt += (
+            " Use the reference image ONLY to maintain character/style consistency. "
+            "IGNORE its composition and pose."
+        )
+    elif ref_type == "content":
+        final_prompt += (
+            " Use the reference image to accurately depict the main subject (e.g., specific logo, person's face). "
+            "Draw it in the requested art style."
+        )
     
     return final_prompt

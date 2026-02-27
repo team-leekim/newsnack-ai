@@ -85,17 +85,15 @@ async def generate_google_image_task(idx: int, prompt: str, content_type: str, r
     client = ai_factory.get_image_client()
     style = ImageStyle.get_style(content_type)
 
-    with_reference = bool(ref_image is not None)
     final_prompt = create_google_image_prompt(
         style=style,
         prompt=prompt,
         content_type=content_type,
-        with_reference=with_reference,
         ref_type=ref_type
     )
     contents = [final_prompt]
 
-    if with_reference:
+    if ref_image:
         contents.append(ref_image)
 
     model_name = settings.GOOGLE_IMAGE_MODEL_PRIMARY
