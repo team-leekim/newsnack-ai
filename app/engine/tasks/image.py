@@ -78,11 +78,12 @@ async def generate_openai_image_task(idx: int, prompt: str, content_type: str, r
 )
 @with_circuit_breaker(
     circuit_id="google_image_api",
+    failure_window_secs=300,
+    recovery_timeout_secs=600,
     fallback_kwargs={
         "override_model_name": settings.GOOGLE_IMAGE_MODEL_FALLBACK,
         "override_image_size": settings.GOOGLE_IMAGE_MODEL_FALLBACK_SIZE
-    },
-    failure_threshold=2
+    }
 )
 async def generate_google_image_task(idx: int, prompt: str, content_type: str, ref_image: Image.Image = None, ref_type: str = "style",
                                      override_model_name: str = None, override_image_size: str = None) -> Image.Image:

@@ -8,16 +8,26 @@ logger = logging.getLogger(__name__)
 
 def with_circuit_breaker(
     circuit_id: str,
-    fallback_kwargs: Optional[dict] = None,
-    target_errors: List[str] = ["503", "500", "429"],
     failure_threshold: int = 2,
+    failure_window_secs: int = 60,
     recovery_timeout_secs: int = 180,
-    failure_window_secs: int = 600,
+    target_errors: List[str] = ["503", "500", "429"],
+    fallback_kwargs: Optional[dict] = None,
 ):
     """
-    서킷 브레이커 + 폴백 라우터 통합 데코레이터
-    - 지정된 에러 발생 시 Redis에 실패를 기록합니다.
-    - Threshold 도달 시 즉시 OPEN(차단) 상태가 되며, 이후 요청은 대기 없이 fallback_kwargs로 재라우팅됩니다.
+    서킷 브레이커 및 폴백 라우팅 통합 데코레이터
+
+    지정된 에러가 발생하면 분산 환경(Redis)에 실패 횟수를 기록합니다. 임계치 도달 시 
+    서킷이 OPEN(차단) 상태가 되며, 지정된 시간 동안 원본 호출을 생략하고 
+    fallback_kwargs를 적용하여 즉각적인 우회(Failover) 라우팅을 수행합니다.
+
+    Args:
+        circuit_id: 서킷 브레이커의 고유 식별자 
+        failure_threshold: 서킷을 OPEN 상태로 전환할 누적 실패 횟수 임계값
+        failure_window_secs: 실패 횟수를 누적하는 기준 시간(초). 해당 시간 내 발생한 에러만 합산됨
+        recovery_timeout_secs: 서킷 OPEN 상태 유지 시간(초). 만료 시 다시 원본 요청을 시도함
+        target_errors: 감지 대상으로 삼을 HTTP 형태의 에러 코드 
+        fallback_kwargs: 서킷 OPEN 상태에서 원본 함수 인자를 덮어쓸 매개변수 딕셔너리
     """
     def decorator(func: Callable):
         @wraps(func)
