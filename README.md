@@ -7,21 +7,24 @@
 - 외부 파이프라인에서 API 호출로 AI 기사/브리핑 생성
 - 이슈별 AI 기사 생성(웹툰 또는 카드뉴스)
 - 오늘의 뉴스낵(오디오 브리핑) 생성
+- 이미지 리서치 에이전트: 도구를 활용해 기사 생성에 참조할 이미지(로고, 인물 등) 수집
 - 멀티 프로바이더 지원: Google, OpenAI 사용 가능
+- Redis 기반 분산 Circuit Breaker: 특정 이미지 모델 장애 시 Fallback 모델로 자동 라우팅
 
 ## 기술 스택
 
+[![Python]][Python url]
 [![FastAPI]][FastAPI url]
 [![LangGraph]][LangGraph url]
 [![LangChain]][LangChain url]
 [![Google Gemini]][Google Gemini url]
 [![OpenAI]][OpenAI url]
+[![PostgreSQL]][PostgreSQL url]
+[![Redis]][Redis url]
 [![GitHub Actions]][GitHub Actions url]
 [![Docker]][Docker url]
 [![Amazon EC2]][Amazon EC2 url]
 [![AWS S3]][AWS S3 url]
-[![PostgreSQL]][PostgreSQL url]
-[![Python]][Python url]
 
 ## 동작 방식
 
@@ -38,9 +41,10 @@
 sequenceDiagram
     participant Orchestrator as Orchestrator<br/>(Airflow)
     participant API as AI Server<br/>(FastAPI)
-    participant Graph as AI Workflow<br/>(LangGraph)
-    participant Tools as Search Tools<br/>(Logo.dev/Wikipedia/Daum)
+    participant Graph as AI Workflow & Agent<br/>(LangGraph)
+    participant IMDB as In-Memory DB<br/>(Redis)
     participant LLM as LLM<br/>(Gemini/OpenAI)
+    participant Tools as Search Tools<br/>(Logo.dev/Wikipedia/Daum)
     participant S3 as Storage<br/>(Amazon S3)
     participant DB as Database<br/>(Amazon RDS)
 
@@ -50,7 +54,8 @@ sequenceDiagram
     Graph->>Tools: (선택) 관련 이미지 리서치
     Graph->>LLM: (선택) 찾은 이미지 검증
     Graph->>LLM: 본문 및 프롬프트 생성
-    Graph->>LLM: 이미지 생성 (전면 또는 리서치 기반 참조)
+    Graph->>IMDB: 이미지 모델 상태 확인
+    Graph->>LLM: 이미지 생성 (상태에 따라 Primary 또는 Fallback 라우팅)
     Graph->>S3: 이미지 업로드
     Graph->>DB: ai_article 저장
 
@@ -86,7 +91,7 @@ graph TD
 
 **주요 노드 설명:**
 - `analyze_article`: 원본 기사 분석, 제목/요약 생성, 콘텐츠 타입(웹툰/카드뉴스) 결정
-- `image_researcher`: 로고, 인물, 일반 이미지 등 기사 맥락에 맞는 요소 리서치 (Gemini 3 Pro Image 모델 사용 시)
+- `image_researcher`: 기사 맥락에 맞는 에셋(로고, 인물 등)을 판단하고, 스스로 검색 도구를 호출해 수집하는 에이전트 노드
 - `validate_image`: 리서치된 이미지가 원본 기사에 적합한지 멀티모달 모델로 정밀 검증
 - `select_editor`: 이슈의 카테고리와 일치하는 에디터 배정 (없으면 랜덤)
 - `draft_article`: 에디터 페르소나 기반 본문 작성 및 이미지 프롬프트 4개 생성 (콘텐츠 타입에 따라 웹툰/카드뉴스 스타일 내부 분기)
@@ -126,7 +131,7 @@ graph TD
 - **API**: FastAPI를 통한 HTTP 인터페이스
 - **워크플로**: LangGraph로 구현된 AI 기사/브리핑 생성 그래프
 - **생성 노드**: 기사 분석 → 에디터 선택 → 본문 작성 → 이미지/오디오 생성 → DB 저장
-- **저장소**: S3 미디어 저장소 + PostgreSQL 메타데이터
+- **저장소**: S3(미디어) + PostgreSQL(메타데이터) + Redis(Circuit Breaker 등 분산 상태 관리)
 - **프로바이더**: 환경 변수로 Google Gemini/OpenAI 자유롭게 전환
 
 ## 호출 방식
@@ -143,6 +148,7 @@ Swagger 문서는 <http://localhost:8000/docs> 에서 확인할 수 있습니다
 필수:
 - `API_KEY`: 요청 헤더 `X-API-KEY` 검증용
 - `DB_URL`: PostgreSQL 연결 문자열
+- `REDIS_URL`: Redis 연결 문자열
 - `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 
 AI 프로바이더:
@@ -188,5 +194,7 @@ uvicorn app.main:app --reload
 [AWS S3 url]: https://aws.amazon.com/s3/
 [PostgreSQL]: https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white
 [PostgreSQL url]: https://www.postgresql.org/
+[Redis]: https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white
+[Redis url]: https://redis.io/
 [Python]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
 [Python url]: https://www.python.org/
