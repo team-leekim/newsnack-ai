@@ -20,15 +20,6 @@ class RedisClient:
                 socket_timeout=5.0,
                 socket_connect_timeout=2.0
             )
-
-            try:
-                await cls._instance.ping()
-                logger.info("Redis connection successfully established.")
-            except Exception as e:
-                logger.error(f"Failed to connect to Redis: {e}")
-                cls._instance = None
-                raise e
-
         return cls._instance
 
     @classmethod
@@ -39,13 +30,22 @@ class RedisClient:
             logger.info("Redis connection pool closed.")
             cls._instance = None
 
+
 async def get_redis() -> Redis:
     return await RedisClient.get_instance()
 
-async def init_redis():
-    """서버 시작 시 Redis 연결을 초기화합니다."""
-    await RedisClient.get_instance()
 
-async def close_redis():
+async def close_redis_connection():
     """서버 종료 시 Redis 연결을 닫습니다."""
     await RedisClient.close()
+
+
+async def check_redis_connection():
+    """Redis 연결 상태를 확인합니다."""
+    try:
+        redis = await get_redis()
+        await redis.ping()
+        logger.info("Redis connection is healthy.")
+    except Exception as e:
+        logger.error(f"Redis connection failed: {e}")
+        raise e
