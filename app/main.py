@@ -1,4 +1,3 @@
-import logging
 from fastapi import FastAPI, Security
 
 from app.api import contents, debug
@@ -8,8 +7,6 @@ from app.core.logging import setup_logging
 from app.core.security import verify_api_key
 
 setup_logging()
-
-logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 app.include_router(contents.router, dependencies=[Security(verify_api_key)])
