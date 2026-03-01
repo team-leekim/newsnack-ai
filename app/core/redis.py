@@ -45,7 +45,6 @@ async def check_redis_connection():
     try:
         redis = await get_redis()
         await redis.ping()
-        logger.info("Redis connection is healthy.")
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
         raise e
