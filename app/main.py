@@ -1,28 +1,15 @@
-import sys
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Security
-from uvicorn.logging import DefaultFormatter
 
 from app.api import contents, debug
 from app.core.config import settings
 from app.core.database import init_db, close_db
+from app.core.logging import setup_logging
 from app.core.redis import init_redis, close_redis
 from app.core.security import verify_api_key
 
-formatter = DefaultFormatter(
-    fmt="%(levelprefix)s %(asctime)s - %(name)s - %(message)s",
-    datefmt="%H:%M:%S",
-    use_colors=True
-)
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(formatter)
-logging.basicConfig(level=logging.INFO, handlers=[handler])
-
-for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-    uvicorn_logger = logging.getLogger(logger_name)
-    uvicorn_logger.handlers.clear()
-    uvicorn_logger.propagate = True
+setup_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
