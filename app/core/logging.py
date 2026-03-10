@@ -36,18 +36,22 @@ LOGGING_CONFIG = {
             "handlers": ["console"],
             "level": "INFO",
         },
+        "uvicorn": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "uvicorn.error": {
+            "level": "INFO",
+            "propagate": True,
+        },
+        "uvicorn.access": {
+            "level": "WARNING",
+            "propagate": True,
+        },
     }
 }
-
-UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
 
 def setup_logging():
     logging.Formatter.converter = time.gmtime
     logging.config.dictConfig(LOGGING_CONFIG)
-
-    for logger_name in UVICORN_LOGGERS:
-        uvicorn_logger = logging.getLogger(logger_name)
-        uvicorn_logger.handlers.clear()
-        uvicorn_logger.propagate = True
-        if logger_name == "uvicorn.access":
-            uvicorn_logger.setLevel(logging.WARNING)

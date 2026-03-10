@@ -46,8 +46,8 @@ async def logging_middleware(request: Request, call_next):
         client_ip = get_client_ip(request)
         client_port = request.client.port if request.client else 0
         
-        logger.error(
-            f'{client_ip}:{client_port} - "{request.method} {request.url.path}" 500 ({duration_ms:.2f}ms) - {e}'
+        logger.exception(
+            f'{client_ip}:{client_port} - "{request.method} {request.url.path}" 500 ({duration_ms:.2f}ms)'
         )
         raise e
     finally:
