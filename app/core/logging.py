@@ -49,3 +49,5 @@ def setup_logging():
         uvicorn_logger = logging.getLogger(logger_name)
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
+        if logger_name == "uvicorn.access":
+            uvicorn_logger.setLevel(logging.WARNING)
